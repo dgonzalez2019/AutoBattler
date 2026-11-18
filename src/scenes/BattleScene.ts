@@ -24,7 +24,9 @@ const KIND_LABEL: Record<OpponentKind, string> = {
 };
 
 const OX = (W - FIELD_W) / 2;
-const OY = 205;
+const OY = 168;
+/** Pseudo-3D: units lower on the field (closer to the camera) draw bigger. */
+const persp = (y: number) => 0.84 + 0.32 * (y / FIELD_H);
 const SPEEDS = [1, 2, 4];
 const SIDE_COLOR = [0x4cc9f0, 0xef476f];
 
@@ -34,6 +36,9 @@ interface UnitSprite {
   lunge: number;
   lungeX: number;
   lungeY: number;
+  /** Game time (ms) until which the hit tint shows. */
+  hitUntil: number;
+  tint: number | null;
 }
 
 /** Renders a FieldBattle in real time. All rules live in the simulator. */
@@ -42,6 +47,8 @@ export class BattleScene extends Phaser.Scene {
   private sprites = new Map<number, UnitSprite>();
   private shots = new Map<number, Phaser.GameObjects.Arc>();
   private overlay!: Phaser.GameObjects.Graphics;
+  /** Shadows and team rings, drawn under the creatures. */
+  private ground!: Phaser.GameObjects.Graphics;
   private counts!: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
   private bars!: Phaser.GameObjects.Graphics;
   private startCounts: [number, number] = [1, 1];
@@ -75,6 +82,7 @@ export class BattleScene extends Phaser.Scene {
     for (const u of this.battle.units) this.addSprite(u, false);
 
     this.overlay = this.add.graphics().setDepth(900);
+    this.ground = this.add.graphics().setDepth(-1);
     this.drawHeader(data, run.round);
 
     this.speedBtn = button(this, W - 210, H - 42, 120, 52, `x${SPEEDS[this.speedIdx]}`, 0x3a86ff, () => {
@@ -178,7 +186,7 @@ export class BattleScene extends Phaser.Scene {
     const size = u.radius * 4.5;
     const baseScale = artScale(this, u.defId, size);
     const img = this.add.image(OX + u.x, OY + u.y, creatureKey(u.defId)).setScale(baseScale).setFlipX(u.side === 1);
-    this.sprites.set(u.id, { img, baseScale, lunge: 0, lungeX: 0, lungeY: 0 });
+    this.sprites.set(u.id, { img, baseScale, lunge: 0, lungeX: 0, lungeY: 0, hitUntil: 0, tint: null });
     if (pop) {
       img.setScale(0);
       this.tweens.add({ targets: img, scale: baseScale, duration: 250, ease: 'Back.easeOut' });
@@ -209,34 +217,42 @@ export class BattleScene extends Phaser.Scene {
   private render() {
     const alpha = this.finished ? 1 : Math.min(1, this.acc / DT);
     const g = this.overlay.clear();
+    const gr = this.ground.clear();
     for (const u of this.battle.units) {
       const s = this.sprites.get(u.id);
       if (!s || !u.alive) continue;
       s.lunge = Math.max(0, s.lunge - 0.12);
       const x = OX + Phaser.Math.Linear(u.px, u.x, alpha) + s.lungeX * s.lunge;
       const y = OY + Phaser.Math.Linear(u.py, u.y, alpha) + s.lungeY * s.lunge;
+      const k = persp(u.y);
       s.img.setPosition(x, y).setDepth(y);
-      // Team ring + health bar
-      const r = u.radius;
-      g.lineStyle(2, SIDE_COLOR[u.side], 0.8).strokeEllipse(x, y + r * 1.2, r * 2.4, r * 0.8);
+      if (!this.tweens.isTweening(s.img)) s.img.setScale(s.baseScale * k);
+      // Ground shadow + team ring, under the sprite
+      const r = u.radius * k;
+      gr.fillStyle(0x000000, 0.35).fillEllipse(x, y + r * 1.25, r * 2.3, r * 0.75);
+      gr.lineStyle(2, SIDE_COLOR[u.side], 0.85).strokeEllipse(x, y + r * 1.25, r * 2.5, r * 0.85);
+      // Health bar only once damaged, so a fresh army stays clean
       const w = r * 2.2;
       const pct = Phaser.Math.Clamp(u.hp / u.maxHp, 0, 1);
-      g.fillStyle(0x000000, 0.6).fillRect(x - w / 2, y - r * 1.9, w, 4);
-      g.fillStyle(SIDE_COLOR[u.side], 1).fillRect(x - w / 2, y - r * 1.9, w * pct, 4);
+      if (pct < 0.999) {
+        g.fillStyle(0x000000, 0.6).fillRect(x - w / 2, y - r * 1.9, w, 4);
+        g.fillStyle(SIDE_COLOR[u.side], 1).fillRect(x - w / 2, y - r * 1.9, w * pct, 4);
+      }
       if (u.shield > 0) {
         const sp = Math.min(1, u.shield / u.maxHp);
         g.fillStyle(0xe0fbfc, 1).fillRect(x - w / 2, y - r * 1.9 - 4, w * sp, 3);
-        g.lineStyle(2, 0x9bf6ff, 0.55).strokeCircle(x, y, r * 1.35);
+        g.lineStyle(1.5, 0x9bf6ff, 0.35).strokeCircle(x, y, r * 1.3);
       }
       if (u.burn > 0) {
         const flick = 0.6 + 0.4 * Math.sin(this.time.now / 70 + u.id);
         g.fillStyle(0xff6a3d, flick).fillTriangle(x - 5, y - r * 2.1, x + 5, y - r * 2.1, x, y - r * 2.1 - 10 - u.burn);
         g.fillStyle(0xffd166, flick).fillTriangle(x - 2, y - r * 2.1, x + 2, y - r * 2.1, x, y - r * 2.1 - 5 - u.burn / 2);
       }
-      if (u.chill > 0) {
-        if (!s.img.isTinted) s.img.setTint(0x9bdcff);
-      } else if (s.img.isTinted && s.img.tintFill === false) {
-        s.img.clearTint();
+      const tint = this.time.now < s.hitUntil ? 0xff7070 : u.chill > 0 ? 0x9bdcff : null;
+      if (tint !== s.tint) {
+        s.tint = tint;
+        if (tint === null) s.img.clearTint();
+        else s.img.setTint(tint);
       }
     }
 
@@ -303,11 +319,9 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'hit': {
         if (!s) return;
-        if (!e.burn) {
-          s.img.setTintFill(0xffffff);
-          this.time.delayedCall(70, () => s.img.active && s.img.clearTint());
-        }
-        if (e.crit) floatText(this, s.img.x, s.img.y - 30, `CRIT ${e.dmg}`, '#ff4d6d', 20);
+        // Brief red tint (applied in render): readable "got hit" without hiding the art.
+        if (!e.burn) s.hitUntil = this.time.now + 90;
+        if (e.crit) floatText(this, s.img.x, s.img.y - 30, `${e.dmg}!`, '#ff4d6d', 18);
         else if (e.burn) floatText(this, s.img.x, s.img.y - 26, `${e.dmg}`, '#ff8c42', 15);
         else if (e.ability || e.eff === 'super') floatText(this, s.img.x, s.img.y - 26, `-${e.dmg}`, e.eff === 'super' ? '#ffd166' : '#ff5d73', 18);
         return;

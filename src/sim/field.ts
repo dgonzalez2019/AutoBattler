@@ -13,7 +13,7 @@ export type BattleResult = 'win' | 'lose' | 'draw';
 // ── Tuning ────────────────────────────────────────────────
 export const DT = 0.05; // seconds per tick (20 ticks/s)
 export const FIELD_W = 1200;
-export const FIELD_H = 400;
+export const FIELD_H = 440;
 export const TIME_LIMIT = 75; // seconds before a draw is called
 const MELEE_RANGE = 8;
 const RANGED_RANGE = 200;
@@ -24,11 +24,17 @@ const COOLDOWN_RANGED = 1.6;
 const PROJ_SPEED = 480;
 const RETARGET_EVERY = 0.4;
 const SEPARATION = 20;
+/** Targeting: vertical distance counts this much more than horizontal, so units fight in their own row. */
+const LANE_WEIGHT = 2.5;
+/** Melee attackers already on a target beyond which others look elsewhere. */
+const MAX_ENGAGE = 3;
+/** Extra "distance" (squared px) per melee attacker already engaging a target. */
+const CROWD_PENALTY = 60 ** 2;
 const AROUND_RADIUS = 70;
 const MAX_ALIVE_PER_SIDE = 160;
 const COL_GAP = 26;
-const ROW_GAP = 48;
-const MAX_ROWS = 7;
+const ROW_GAP = 52;
+const MAX_ROWS = 8;
 const BURN_TICK = 1;
 
 // ── Synergy numbers (player-facing text lives in data/traits.ts) ──
@@ -138,6 +144,8 @@ export class FieldBattle {
   private depth = 0;
   /** Hits landing this tick. Resolved together so simultaneous blows both connect. */
   private pending: PendingHit[] = [];
+  /** Melee attackers per target, counted at the start of each tick (order-independent). */
+  private engaged = new Map<number, number>();
 
   constructor(
     readonly armies: [ArmySnapshot, ArmySnapshot],
@@ -272,9 +280,11 @@ export class FieldBattle {
     this.tick++;
     this.time += DT;
     const list = this.tick % 2 ? this.units : [...this.units].reverse();
+    this.engaged.clear();
     for (const u of list) {
       u.px = u.x;
       u.py = u.y;
+      if (u.alive && !u.ranged && u.targetId) this.engaged.set(u.targetId, (this.engaged.get(u.targetId) ?? 0) + 1);
     }
     for (const u of list) if (u.alive) this.think(u);
     this.moveProjectiles();
@@ -304,8 +314,10 @@ export class FieldBattle {
     u.cd -= DT * slow * (1 + u.haste);
     u.retarget -= DT;
     let target = this.byId.get(u.targetId);
-    if (!target?.alive || u.retarget <= 0) {
-      target = this.nearestEnemy(u);
+    const inReach = (t: FieldUnit) => Math.hypot(t.px - u.px, t.py - u.py) <= u.range + u.radius + t.radius + 2;
+    // Stick with a target already in reach; otherwise look for the best one periodically.
+    if (!target?.alive || (u.retarget <= 0 && !inReach(target))) {
+      target = this.chooseTarget(u);
       u.targetId = target?.id ?? 0;
       u.retarget = RETARGET_EVERY;
     }
@@ -364,16 +376,41 @@ export class FieldBattle {
     });
   }
 
-  /** Push away from overlapping allies so armies spread out instead of stacking. */
+  /**
+   * Pick a target: close, in the same row, and not already swarmed.
+   * Ranged units only care about distance and row; melee also avoid crowded targets.
+   */
+  private chooseTarget(u: FieldUnit): FieldUnit | undefined {
+    let best: FieldUnit | undefined;
+    let bestCost = Infinity;
+    for (const o of this.units) {
+      if (!o.alive || o.side === u.side) continue;
+      const dx = o.px - u.px;
+      const dy = o.py - u.py;
+      let cost = dx * dx + LANE_WEIGHT * dy * dy;
+      if (!u.ranged) {
+        const n = (this.engaged.get(o.id) ?? 0) - (u.targetId === o.id ? 1 : 0);
+        cost += n * CROWD_PENALTY + (n >= MAX_ENGAGE ? CROWD_PENALTY * 4 : 0);
+      }
+      if (cost < bestCost || (cost === bestCost && best && o.id < best.id)) {
+        bestCost = cost;
+        best = o;
+      }
+    }
+    return best;
+  }
+
+  /** Bodies don't overlap: push apart from allies, and harder from enemies (no walking through). */
   private separate(u: FieldUnit) {
     for (const o of this.units) {
-      if (o === u || !o.alive || o.side !== u.side) continue;
+      if (o === u || !o.alive) continue;
+      const min = o.side === u.side ? SEPARATION : (u.radius + o.radius) * 0.8;
       const dx = u.px - o.px;
       const dy = u.py - o.py;
-      if (Math.abs(dx) > SEPARATION || Math.abs(dy) > SEPARATION) continue;
+      if (Math.abs(dx) > min || Math.abs(dy) > min) continue;
       const d = Math.hypot(dx, dy);
-      if (d >= SEPARATION) continue;
-      const push = (SEPARATION - d) * 0.25;
+      if (d >= min) continue;
+      const push = (min - d) * (o.side === u.side ? 0.25 : 0.4);
       const nx = d > 0.01 ? dx / d : u.id < o.id ? -0.7 : 0.7;
       const ny = d > 0.01 ? dy / d : u.id < o.id ? -0.7 : 0.7;
       u.x += nx * push;
