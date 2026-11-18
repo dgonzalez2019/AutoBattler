@@ -8,6 +8,7 @@ A browser autobattler with sci-fi alien creatures. Build a team in the shop, the
 npm install
 npm run dev      # local dev server with hot reload
 npm test         # battle and shop logic tests
+npm run playtest # bots play hundreds of full runs vs the AI and report win rates per round
 npm run build    # production build into dist/
 ```
 

@@ -125,3 +125,25 @@ describe('reward track layout', () => {
     for (const t of rewardTrack()) expect(t.creatures.length + t.commanders.length).toBeLessThanOrEqual(3);
   });
 });
+
+describe('AI opponents', () => {
+  it('build armies like a player: few squads early, full and leveled later', async () => {
+    const { generateOpponent } = await import('./ai');
+    const early = generateOpponent(1, 11);
+    expect(early.squads.length).toBeGreaterThanOrEqual(1);
+    expect(early.squads.length).toBeLessThanOrEqual(3);
+    expect(early.squads.every((s) => s.level === 1)).toBe(true);
+    let leveled = 0;
+    for (let s = 0; s < 10; s++) {
+      const late = generateOpponent(9, 100 + s);
+      expect(late.squads.length).toBe(5);
+      if (late.squads.some((q) => q.level >= 2)) leveled++;
+    }
+    expect(leveled).toBeGreaterThanOrEqual(7);
+  });
+
+  it('is deterministic for a seed', async () => {
+    const { generateOpponent } = await import('./ai');
+    expect(generateOpponent(6, 42)).toEqual(generateOpponent(6, 42));
+  });
+});

@@ -8,6 +8,8 @@ import type { ArmySnapshot, SquadSpec } from './army';
 import { emptyModules, MODULES, moduleBonus, type ModuleId, type ModuleLevels } from './mothership';
 
 export const MAX_SQUADS = 5;
+/** Chance each shop slot offers another copy of a creature already in your army. */
+export const DUPLICATE_CHANCE = 0.25;
 /** Health gained per merge (attack gains 1). */
 export const MERGE_HP = 2;
 
@@ -130,6 +132,13 @@ export class Run {
   }
 
   private rollUnit(): TeamUnit {
+    // Sometimes offer another copy of a creature you already field, so merging and
+    // evolving stay reachable no matter how many creatures you've unlocked.
+    const owned = this.team.filter((u): u is TeamUnit => !!u && u.level < 3);
+    if (owned.length && this.rng.next() < DUPLICATE_CHANCE) {
+      const d = getDef(this.rng.pick(owned).defId);
+      return { defId: d.id, atk: d.atk, hp: d.hp, level: 1, xp: 0 };
+    }
     const def = rollCreature(this.rng, this.round, this.pool);
     return { defId: def.id, atk: def.atk, hp: def.hp, level: 1, xp: 0 };
   }
