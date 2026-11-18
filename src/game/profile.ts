@@ -1,6 +1,6 @@
 import { COMMANDER_LIST, COMMANDERS, DEFAULT_COMMANDER } from '../data/commanders';
 import { BASE_POOL, CREATURES, SHOP_POOL } from '../data/creatures';
-import { MAX_LEVEL, RESEARCH_PRICE, runRewards, rewardTrack, xpToNext, type LevelReward, type RunSummary } from '../data/progression';
+import { endlessRewards, MAX_LEVEL, RESEARCH_PRICE, runRewards, rewardTrack, xpToNext, type LevelReward, type RunSummary } from '../data/progression';
 
 /**
  * Persistent meta progression: everything that carries over between runs.
@@ -16,7 +16,7 @@ export interface ProfileData {
   /** Creatures unlocked beyond the base roster. */
   creatures: string[];
   selectedCommander: string;
-  stats: { runs: number; wins: number; champions: number; bestWins: number; bestEndless: number };
+  stats: { runs: number; wins: number; champions: number; bestWins: number; bestEndless: number; endlessClears: number };
   /** Creatures unlocked since the player last opened the collection. */
   fresh: string[];
 }
@@ -39,7 +39,7 @@ export function newProfile(): ProfileData {
     commanders: COMMANDER_LIST.filter((c) => c.unlockLevel <= 1).map((c) => c.id),
     creatures: [],
     selectedCommander: DEFAULT_COMMANDER,
-    stats: { runs: 0, wins: 0, champions: 0, bestWins: 0, bestEndless: 0 },
+    stats: { runs: 0, wins: 0, champions: 0, bestWins: 0, bestEndless: 0, endlessClears: 0 },
     fresh: [],
   };
 }
@@ -66,6 +66,7 @@ function sanitize(raw: unknown): ProfileData {
       champions: num(st.champions, 0, 1e7, 0),
       bestWins: num(st.bestWins, 0, 9999, 0),
       bestEndless: num(st.bestEndless, 0, 9999, 0),
+      endlessClears: num(st.endlessClears, 0, 1e7, 0),
     };
   }
   // Level unlocks are always granted, even if the save missed them.
@@ -158,13 +159,26 @@ export class Profile {
   /** Bank a finished run: XP, Stardust, level-ups and their unlocks. */
   finishRun(summary: RunSummary): RunResult {
     const d = this.data;
-    const rewards = runRewards(summary);
-    const levelBefore = d.level;
     d.stats.runs++;
     d.stats.wins += summary.wins;
     d.stats.bestWins = Math.max(d.stats.bestWins, summary.wins);
-    if (summary.endlessWins) d.stats.bestEndless = Math.max(d.stats.bestEndless, summary.endlessWins);
     if (summary.champion) d.stats.champions++;
+    return this.award(runRewards(summary));
+  }
+
+  /** Bank the Endless part of a run (the championship was already banked at 10 wins). */
+  finishEndless(endlessWins: number, endlessRounds: number, conquered: boolean): RunResult {
+    const d = this.data;
+    d.stats.wins += endlessWins;
+    d.stats.bestEndless = Math.max(d.stats.bestEndless, endlessWins);
+    if (conquered) d.stats.endlessClears++;
+    return this.award(endlessRewards(endlessWins, endlessRounds, conquered));
+  }
+
+  /** Add XP and Stardust, then apply level-ups and their unlocks. */
+  private award(rewards: { xp: number; stardust: number }): RunResult {
+    const d = this.data;
+    const levelBefore = d.level;
     d.stardust += rewards.stardust;
     d.xp += rewards.xp;
     const levelsGained: LevelReward[] = [];

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { COMMANDER_LIST } from '../data/commanders';
 import { BASE_POOL, CREATURES, SHOP_POOL } from '../data/creatures';
-import { rewardTrack, runRewards, xpToNext } from '../data/progression';
+import { endlessRewards, rewardTrack, runRewards, xpToNext } from '../data/progression';
 import { FieldBattle } from '../sim/field';
 import { emptyModules } from './mothership';
 import { newProfile, Profile } from './profile';
-import { Run } from './run';
+import { ENDLESS_FINAL_ROUND, Run } from './run';
 
 const fresh = () => new Profile(newProfile());
 const army = (ids: string[], commander?: string) => ({
@@ -175,20 +175,54 @@ describe('Endless Mode', () => {
   it('enemy power ramps up after normal runs would end', async () => {
     const { endlessPower, ENDLESS_SCALING_FROM, generateOpponent } = await import('./ai');
     expect(endlessPower(ENDLESS_SCALING_FROM - 1)).toBe(1);
-    expect(endlessPower(ENDLESS_SCALING_FROM)).toBeCloseTo(1.06);
-    expect(endlessPower(ENDLESS_SCALING_FROM + 9)).toBeCloseTo(1.6);
+    expect(endlessPower(ENDLESS_SCALING_FROM)).toBeCloseTo(1.04);
+    expect(endlessPower(ENDLESS_SCALING_FROM + 9)).toBeCloseTo(1.4);
     const late = generateOpponent(30, 5);
     expect(late.squads.length).toBe(5);
   });
 
-  it('endless wins pay extra and record your best', () => {
+  it('the championship is banked at 10 wins; Endless pays separately', () => {
     const p = fresh();
-    const plain = runRewards({ wins: 10, rounds: 12, champion: true });
-    const endless = runRewards({ wins: 15, rounds: 17, champion: true, endlessWins: 5 });
-    expect(endless.xp).toBeGreaterThan(plain.xp);
-    expect(endless.stardust).toBeGreaterThan(plain.stardust);
-    p.finishRun({ wins: 15, rounds: 17, champion: true, endlessWins: 5 });
-    expect(p.data.stats.bestEndless).toBe(5);
+    const champ = p.finishRun({ wins: 10, rounds: 12, champion: true });
     expect(p.data.stats.champions).toBe(1);
+    expect(champ.rewards.xp).toBe(runRewards({ wins: 10, rounds: 12, champion: true }).xp);
+    const dustBefore = p.data.stardust;
+    const endless = p.finishEndless(5, 7, false);
+    expect(endless.rewards).toEqual(endlessRewards(5, 7, false));
+    expect(p.data.stardust).toBeGreaterThanOrEqual(dustBefore + endless.rewards.stardust);
+    expect(p.data.stats.bestEndless).toBe(5);
+    expect(p.data.stats.runs).toBe(1); // one run, banked in two parts
+    p.finishEndless(30, 39, true);
+    expect(p.data.stats.endlessClears).toBe(1);
+    expect(endlessRewards(30, 39, true).stardust).toBeGreaterThan(endlessRewards(30, 39, false).stardust);
+  });
+
+  it('Endless ends in victory after round 50', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
+    for (let i = 0; i < 10; i++) run.finishBattle('win');
+    run.continueEndless();
+    expect(run.endlessFrom).toBe(11);
+    while (run.status === 'playing') run.finishBattle('win');
+    expect(run.status).toBe('conquered');
+    expect(run.round).toBe(ENDLESS_FINAL_ROUND + 1);
+    expect(run.endlessRounds).toBe(ENDLESS_FINAL_ROUND - 10);
+  });
+
+});
+
+describe('Endless lives', () => {
+  it('losses cost 1 life and every 4 endless wins restores one', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
+    for (let i = 0; i < 10; i++) run.finishBattle('win');
+    run.continueEndless();
+    const start = run.lives;
+    run.finishBattle('lose');
+    expect(run.lives).toBe(start - 1);
+    for (let i = 0; i < 3; i++) run.finishBattle('win');
+    expect(run.lives).toBe(start - 1);
+    run.finishBattle('win'); // 4th endless win
+    expect(run.lives).toBe(start);
+    for (let i = 0; i < 8; i++) run.finishBattle('win');
+    expect(run.lives).toBeLessThanOrEqual(run.maxLives);
   });
 });

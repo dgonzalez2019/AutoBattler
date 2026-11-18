@@ -36,11 +36,12 @@ npm run build    # production build into dist/
   - Armory: more attack.
   - Shield Bay: more health.
   - Reactor: more gold each turn.
-- **Endless Mode:** at 10 wins you choose to claim your rewards or keep playing.
-  - Endless keeps your army and lives and only ends when your lives run out.
-  - From round 14, AI enemies gain +6% attack and health per round (`endlessPower` in `src/game/ai.ts`).
-  - Each endless win pays extra XP and Stardust, and your best endless record is saved.
-  - In the playtest, strong players typically survive 5 to 6 extra wins; the best runs reach 20+.
+- **Winning and Endless Mode:** reaching 10 wins is a victory. The championship and its rewards are banked immediately, then you choose to finish the run or continue with your army in Endless Mode.
+  - Endless runs until your lives run out, or until you survive round 50 and conquer it (big XP and Stardust bonus).
+  - In Endless, a loss costs 1 life, and every 4 endless wins restores a life (up to your starting lives).
+  - From round 14, AI enemies gain +4% attack and health per round (`endlessPower` in `src/game/ai.ts`).
+  - Endless pays its own rewards when it ends, and your best record and conquests are saved.
+  - Playtest (`ENDLESS=1 npm run playtest`): champions continuing last a median of 7 to 8 extra wins, about 1 in 5 reach round 30, and about 4% conquer round 50.
 - **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You have 5 lives and win the run at 10 wins. See [Online matchmaking](#online-matchmaking).
 
 ### Synergies

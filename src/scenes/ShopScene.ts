@@ -10,7 +10,7 @@ import { opponents } from '../game/matchmaking';
 import { endlessPower, ENDLESS_SCALING_FROM } from '../game/ai';
 import { playerName } from '../game/player';
 import { MODULES, moduleText } from '../game/mothership';
-import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
+import { ENDLESS_FINAL_ROUND, MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
 import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
@@ -84,7 +84,7 @@ export class ShopScene extends Phaser.Scene {
         .text(
           640,
           118,
-          `ENDLESS MODE  ·  ${this.run.endlessWins} endless wins  ·  ${power > 0 ? `enemy power +${power}%` : `enemies start powering up at round ${ENDLESS_SCALING_FROM}`}`,
+          `ENDLESS  ·  Round ${this.run.round} / ${ENDLESS_FINAL_ROUND}  ·  ${this.run.endlessWins} endless wins  ·  ${power > 0 ? `enemy power +${power}%` : `enemies power up from round ${ENDLESS_SCALING_FROM}`}`,
           { fontFamily: FONT_DISPLAY, fontSize: '16px', color: '#e0aaff', backgroundColor: '#3a0ca3', padding: { x: 14, y: 5 } },
         )
         .setOrigin(0.5);

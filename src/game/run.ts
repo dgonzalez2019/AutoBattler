@@ -65,7 +65,18 @@ export interface RunOptions {
   pool?: string[];
 }
 
-export type RunStatus = 'playing' | 'won' | 'lost';
+/**
+ * playing: in progress. won: just reached 10 wins (champion). lost: out of lives.
+ * conquered: survived Endless Mode to the final round.
+ */
+export type RunStatus = 'playing' | 'won' | 'lost' | 'conquered';
+
+/** Endless Mode's finish line: survive through this round to conquer it. */
+export const ENDLESS_FINAL_ROUND = 50;
+/** Lives lost per defeat in Endless Mode. */
+export const ENDLESS_LOSS_LIVES = 1;
+/** Every this many endless wins restores one life (up to your starting lives). */
+export const ENDLESS_LIFE_EVERY = 4;
 
 /** One full playthrough: shop state, team, lives and wins. Pure logic, no rendering. */
 export class Run {
@@ -129,13 +140,27 @@ export class Run {
     return this.endless ? Math.max(0, this.wins - WINS_TO_VICTORY) : 0;
   }
 
+  /** Round Endless Mode began on. */
+  endlessFrom = 0;
+
+  /** Rounds played in Endless Mode so far. */
+  get endlessRounds(): number {
+    return this.endless ? Math.max(0, Math.min(this.round - 1, ENDLESS_FINAL_ROUND) - this.endlessFrom + 1) : 0;
+  }
+
   /** Keep playing after becoming champion. */
   continueEndless() {
-    if (this.wins >= WINS_TO_VICTORY) this.endless = true;
+    if (this.wins >= WINS_TO_VICTORY && !this.endless) {
+      this.endless = true;
+      this.endlessFrom = this.round;
+    }
   }
 
   get status(): RunStatus {
-    if (this.endless) return this.lives <= 0 ? 'lost' : 'playing';
+    if (this.endless) {
+      if (this.lives <= 0) return 'lost';
+      return this.round > ENDLESS_FINAL_ROUND ? 'conquered' : 'playing';
+    }
     if (this.wins >= WINS_TO_VICTORY) return 'won';
     if (this.lives <= 0) return 'lost';
     return 'playing';
@@ -329,7 +354,15 @@ export class Run {
   finishBattle(result: BattleResult) {
     this.lastResult = result;
     if (result === 'win') this.wins++;
-    if (result === 'lose') this.lives = Math.max(0, this.lives - (this.round <= 2 ? 1 : 2));
+    if (this.endless) {
+      // Endless: gentler losses, and a life back every few wins, so long streaks are possible.
+      if (result === 'lose') this.lives = Math.max(0, this.lives - ENDLESS_LOSS_LIVES);
+      if (result === 'win' && this.endlessWins > 0 && this.endlessWins % ENDLESS_LIFE_EVERY === 0) {
+        this.lives = Math.min(this.maxLives, this.lives + 1);
+      }
+    } else if (result === 'lose') {
+      this.lives = Math.max(0, this.lives - (this.round <= 2 ? 1 : 2));
+    }
     this.round++;
     this.startTurn();
     this.refillShop(false);

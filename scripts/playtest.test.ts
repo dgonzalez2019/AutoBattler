@@ -53,7 +53,7 @@ function playRuns(bot: Bot, pool: string[], label: string, seed0: number) {
     const commander = rng.pick(COMMANDER_LIST).id;
     const run = new Run({ seed: seed0 + r, commander, pool });
     const mem: { focus?: TraitId } = {};
-    while (run.round <= 80) {
+    while (run.round <= 60) {
       if (run.status === 'won' && process.env.ENDLESS) run.continueEndless();
       if (run.status !== 'playing') break;
       bot(run, rng, mem);
@@ -85,7 +85,7 @@ function playRuns(bot: Bot, pool: string[], label: string, seed0: number) {
   const avgRounds = finals.reduce((a, f) => a + f.rounds, 0) / finals.length;
   const endlessRuns = finals.filter((f) => f.champion).map((f) => f.endless).sort((a, b) => a - b);
   const endlessLine = endlessRuns.length
-    ? `   endless (champions continuing): median ${endlessRuns[Math.floor(endlessRuns.length / 2)]} extra wins, best ${endlessRuns[endlessRuns.length - 1]}, worst ${endlessRuns[0]}`
+    ? `   endless (champions continuing): median ${endlessRuns[Math.floor(endlessRuns.length / 2)]} extra wins, best ${endlessRuns[endlessRuns.length - 1]}, worst ${endlessRuns[0]}; reached round 30: ${finals.filter((f) => f.rounds >= 30).length}, 40: ${finals.filter((f) => f.rounds >= 40).length}, conquered (50): ${finals.filter((f) => f.rounds >= 50).length} of ${endlessRuns.length}`
     : '   endless: no champions';
   return [
     `== ${label}: ${RUNS} runs, ${battles} battles`,

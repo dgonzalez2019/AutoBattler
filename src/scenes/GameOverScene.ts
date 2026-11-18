@@ -6,7 +6,7 @@ import { COMMANDERS } from '../data/commanders';
 import { xpToNext } from '../data/progression';
 import { hexColor, RARITY } from '../data/rarity';
 import { profile, type RunResult } from '../game/profile';
-import { WINS_TO_VICTORY, type Run } from '../game/run';
+import { ENDLESS_FINAL_ROUND, WINS_TO_VICTORY, type Run } from '../game/run';
 import { getDef } from '../data/creatures';
 import { formName } from '../data/evolutions';
 import { COLORS, FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
@@ -26,33 +26,40 @@ export class GameOverScene extends Phaser.Scene {
     fitCamera(this);
     this.cameras.main.fadeIn(250);
 
-    // Just hit 10 wins: offer Endless Mode before banking anything.
-    if (run.status === 'won' && !this.registry.get('rewarded') && !this.registry.get('claimed')) {
-      this.championChoice(run);
-      return;
+    const justWon = run.status === 'won';
+    const conquered = run.status === 'conquered';
+
+    // Bank rewards exactly once: the run (incl. championship at 10 wins), then Endless separately.
+    let result: RunResult;
+    if (run.endless) {
+      result = this.registry.get('endlessResult');
+      if (!this.registry.get('endlessRewarded')) {
+        result = profile().finishEndless(run.endlessWins, run.endlessRounds, conquered);
+        this.registry.set('endlessRewarded', true);
+        this.registry.set('endlessResult', result);
+      }
+    } else {
+      result = this.registry.get('runResult');
+      if (!this.registry.get('rewarded')) {
+        result = profile().finishRun({ wins: run.wins, rounds: run.round - 1, champion });
+        this.registry.set('rewarded', true);
+        this.registry.set('runResult', result);
+      }
     }
 
-    // Bank rewards exactly once per run.
-    let result: RunResult = this.registry.get('runResult');
-    if (!this.registry.get('rewarded')) {
-      result = profile().finishRun({ wins: run.wins, rounds: run.round - 1, champion, endlessWins: run.endlessWins });
-      this.registry.set('rewarded', true);
-      this.registry.set('runResult', result);
-    }
-
-    const title = run.endless ? 'ENDLESS OVER' : champion ? 'CHAMPION!' : 'RUN OVER';
+    const title = conquered ? 'ENDLESS CONQUERED!' : run.endless ? 'ENDLESS OVER' : champion ? 'CHAMPION!' : 'RUN OVER';
+    const titleColor = conquered ? '#ffd166' : run.endless ? '#c77dff' : champion ? '#ffd166' : '#ef476f';
     this.add
-      .text(W / 2, 90, title, {
-        fontFamily: FONT_DISPLAY,
-        fontSize: '72px',
-        color: run.endless ? '#c77dff' : champion ? '#ffd166' : '#ef476f',
-        stroke: '#000000',
-        strokeThickness: 10,
-      })
+      .text(W / 2, 90, title, { fontFamily: FONT_DISPLAY, fontSize: '72px', color: titleColor, stroke: '#000000', strokeThickness: 10 })
       .setOrigin(0.5);
-    const endlessNote = run.endless ? `  ·  ${run.endlessWins} endless wins (best ${profile().data.stats.bestEndless})` : '';
+    const best = profile().data.stats.bestEndless;
+    const subtitle = run.endless
+      ? `${run.endlessWins} endless wins  ·  survived to round ${Math.min(run.round - 1, ENDLESS_FINAL_ROUND)} / ${ENDLESS_FINAL_ROUND}  ·  best ${best}`
+      : justWon
+        ? `${WINS_TO_VICTORY} wins with ${run.lives} ${run.lives === 1 ? 'life' : 'lives'} to spare  ·  ${run.commander.name}`
+        : `${run.wins} wins  ·  ${run.round - 1} rounds  ·  ${run.commander.name}`;
     this.add
-      .text(W / 2, 152, `${run.wins} wins  ·  ${run.round - 1} rounds  ·  ${run.commander.name}${endlessNote}`, {
+      .text(W / 2, 152, subtitle, {
         fontFamily: FONT_BODY,
         fontSize: '24px',
         fontStyle: 'bold',
@@ -115,65 +122,35 @@ export class GameOverScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
+    if (justWon) {
+      this.endlessOffer(run);
+      return;
+    }
     button(this, W / 2 - 170, H - 70, 300, 70, 'COMMAND HQ', 0x7b2cbf, () => this.scene.start('HQ', { tab: result.levelsGained.length ? 'collection' : 'commanders' }));
     button(this, W / 2 + 170, H - 70, 300, 70, 'PLAY AGAIN', 0x06d6a0, () => this.scene.start('HQ', { tab: 'commanders' }));
   }
 
-  /** 10 wins: claim the championship now, or keep the army going in Endless Mode. */
-  private championChoice(run: Run) {
-    this.add
-      .text(W / 2, 110, 'CHAMPION!', { fontFamily: FONT_DISPLAY, fontSize: '84px', color: '#ffd166', stroke: '#000000', strokeThickness: 12 })
-      .setOrigin(0.5);
-    this.add
-      .text(W / 2, 185, `${WINS_TO_VICTORY} wins with ${run.lives} ${run.lives === 1 ? 'life' : 'lives'} to spare, led by ${run.commander.name}.`, {
-        fontFamily: FONT_BODY,
-        fontSize: '24px',
-        fontStyle: 'bold',
-        color: '#e8ecff',
-      })
-      .setOrigin(0.5);
-    // Show the winning army
+  /** After the championship is banked: finish here, or take this army into Endless Mode. */
+  private endlessOffer(run: Run) {
     const squads = run.team.filter(Boolean) as NonNullable<Run['team'][number]>[];
-    squads.forEach((u, i) => {
-      const x = W / 2 + (i - (squads.length - 1) / 2) * 150;
-      const img = this.add.image(x, 320, creatureKey(u.defId, u.level)).setScale(artScale(this, u.defId, 120, u.level));
-      this.tweens.add({ targets: img, y: 310, duration: 800 + i * 90, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      this.add
-        .text(x, 395, formName(getDef(u.defId), u.level), { fontFamily: FONT_BODY, fontSize: '14px', fontStyle: 'bold', color: '#e8ecff' })
-        .setOrigin(0.5);
-    });
-
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.panel, 0.92).fillRoundedRect(W / 2 - 560, 440, 1120, 150, 18);
     this.add
-      .text(W / 2 - 280, 470, 'CLAIM REWARDS', { fontFamily: FONT_DISPLAY, fontSize: '20px', color: '#ffd166' })
-      .setOrigin(0.5);
-    this.add
-      .text(W / 2 - 280, 505, 'End the run as champion and bank your XP and Stardust now.', {
+      .text(W / 2, 520, `Championship banked! Keep going in ENDLESS MODE with this army: survive to round ${ENDLESS_FINAL_ROUND}.`, {
         fontFamily: FONT_BODY,
         fontSize: '15px',
-        color: COLORS.textDim,
-        align: 'center',
-        wordWrap: { width: 480 },
+        fontStyle: 'bold',
+        color: '#e0aaff',
       })
-      .setOrigin(0.5, 0);
-    this.add
-      .text(W / 2 + 280, 470, 'ENDLESS MODE', { fontFamily: FONT_DISPLAY, fontSize: '20px', color: '#c77dff' })
       .setOrigin(0.5);
-    this.add
-      .text(
-        W / 2 + 280,
-        505,
-        `Keep this army and your ${run.lives} ${run.lives === 1 ? 'life' : 'lives'}. Enemies keep growing stronger every round. Every extra win adds XP and Stardust; the championship bonus is kept.`,
-        { fontFamily: FONT_BODY, fontSize: '15px', color: COLORS.textDim, align: 'center', wordWrap: { width: 500 } },
-      )
-      .setOrigin(0.5, 0);
-
-    button(this, W / 2 - 280, H - 60, 340, 70, 'CLAIM REWARDS', 0xffb703, () => {
-      this.registry.set('claimed', true);
-      this.scene.restart();
+    squads.forEach((u, i) => {
+      const x = W / 2 + (i - (squads.length - 1) / 2) * 110;
+      const img = this.add.image(x, 562, creatureKey(u.defId, u.level)).setScale(artScale(this, u.defId, 52, u.level));
+      this.tweens.add({ targets: img, y: 556, duration: 700 + i * 90, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.add
+        .text(x, 580, formName(getDef(u.defId), u.level), { fontFamily: FONT_BODY, fontSize: '11px', fontStyle: 'bold', color: '#e8ecff' })
+        .setOrigin(0.5, 0);
     });
-    button(this, W / 2 + 280, H - 60, 340, 70, 'CONTINUE: ENDLESS', 0x7b2cbf, () => {
+    button(this, W / 2 - 200, H - 70, 340, 70, 'FINISH RUN', 0x5c677d, () => this.scene.start('HQ', { tab: 'commanders' }));
+    button(this, W / 2 + 200, H - 70, 340, 70, 'CONTINUE: ENDLESS', 0x7b2cbf, () => {
       run.continueEndless();
       this.cameras.main.fadeOut(250);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Shop'));

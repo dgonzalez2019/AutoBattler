@@ -7,7 +7,7 @@ import { TRAITS } from '../data/traits';
 import { ALL_TRAITS } from '../game/synergy';
 import type { ArmySnapshot } from '../game/army';
 import type { OpponentKind } from '../game/matchmaking';
-import type { Run } from '../game/run';
+import { ENDLESS_FINAL_ROUND, type Run } from '../game/run';
 import { DT, FIELD_H, FIELD_W, FieldBattle, type BattleResult, type FieldEvent, type FieldUnit } from '../sim/field';
 import { COLORS, FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
 import { button, drawBackground, floatText, type Button } from '../ui/widgets';
@@ -118,7 +118,7 @@ export class BattleScene extends Phaser.Scene {
     name(40, data.player.name.toUpperCase(), '#4cc9f0', 0);
     name(W - 40, data.enemy.name.toUpperCase(), '#ef476f', 1);
     this.add
-      .text(W / 2, 36, run.endless ? `ROUND ${round}  ·  ENDLESS` : `ROUND ${round}`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffffff' })
+      .text(W / 2, 36, run.endless ? `ROUND ${round} / ${ENDLESS_FINAL_ROUND}  ·  ENDLESS` : `ROUND ${round}`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffffff' })
       .setOrigin(0.5)
       .setDepth(950);
     const countStyle = { fontFamily: FONT_BODY, fontSize: '18px', fontStyle: 'bold', color: '#e8ecff' };
