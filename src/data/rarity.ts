@@ -44,8 +44,16 @@ export function rollRarity(round: number, r: number): Rarity {
 }
 
 /** Gold back when selling: grows with rarity and level. */
-export function sellValue(rarity: Rarity, level: number): number {
-  return level + rarity - 1;
+/** Share of the gold you put into a squad that you get back when selling it. */
+export const SELL_RATE = 0.75;
+
+/**
+ * Gold back when selling: 75% of what the squad cost you, counting every copy
+ * merged into it (xp + 1 copies). A Common sells for 2, a Legendary for 6, and a
+ * level 3 Common built from 6 copies for 13.
+ */
+export function sellValue(rarity: Rarity, xp: number): number {
+  return Math.max(1, Math.floor(RARITY[rarity].cost * (xp + 1) * SELL_RATE));
 }
 
 export const hexColor = (c: number) => '#' + c.toString(16).padStart(6, '0');

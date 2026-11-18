@@ -51,9 +51,11 @@ describe('rarity', () => {
     expect(run.buy(0, 0)).toBe(true);
     expect(run.gold).toBe(0);
     expect(RARITY[5].cost).toBe(8);
-    expect(sellValue(5, 1)).toBe(5);
+    expect(sellValue(5, 0)).toBe(6); // 75% of 8
+    expect(sellValue(1, 0)).toBe(2); // 75% of 3
+    expect(sellValue(1, 5)).toBe(13); // level 3 Common from 6 copies
     run.sell(0);
-    expect(run.gold).toBe(5);
+    expect(run.gold).toBe(6);
   });
 
   it('shop grows from 3 to 4 to 5 slots', () => {

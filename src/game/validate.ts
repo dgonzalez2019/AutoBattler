@@ -45,7 +45,7 @@ export function parseArmy(raw: unknown): ArmySnapshot | null {
     name,
     round: int(r.round, 1, 999) ?? 1,
     wins: int(r.wins, 0, 999) ?? 0,
-    lives: int(r.lives, 0, 9) ?? 0,
+    lives: int(r.lives, 0, 30) ?? 0,
     squads,
     boost,
     commander: typeof army.commander === 'string' && COMMANDERS[army.commander] ? army.commander : undefined,

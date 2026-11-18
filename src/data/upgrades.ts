@@ -37,7 +37,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'reinforcements', name: 'Reinforcements', color: 0xef476f, costs: [400, 800],
-    levels: ['+1 life every run', '+2 lives every run'],
+    levels: ['+2 lives every run', '+4 lives every run'],
   },
   {
     id: 'weapons', name: 'Weapons Lab', color: 0xff8c42, costs: [100, 200, 350, 550, 800],
@@ -78,7 +78,7 @@ export function metaBonuses(levels: UpgradeLevels): MetaBonuses {
   const l = (id: UpgradeId) => levels[id] ?? 0;
   return {
     startGold: l('warchest'),
-    extraLives: l('reinforcements'),
+    extraLives: 2 * l('reinforcements'),
     interestCap: l('interest'),
     freeRerolls: l('reroll'),
     sellBonus: l('salvage'),

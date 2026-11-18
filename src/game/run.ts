@@ -55,7 +55,12 @@ export interface Income {
   total: number;
 }
 export const REROLL_COST = 1;
-export const START_LIVES = 5;
+export const START_LIVES = 15;
+
+/** Lives lost per defeat: 1 early, rising to 3. */
+export function livesLost(round: number): number {
+  return round <= 4 ? 1 : round <= 8 ? 2 : 3;
+}
 export const WINS_TO_VICTORY = 10;
 
 export function levelForXp(xp: number): number {
@@ -109,7 +114,7 @@ export type RunStatus = 'playing' | 'won' | 'lost' | 'conquered';
  */
 export const ENDLESS_FINAL_ROUND = 50;
 /** Lives lost per defeat in Endless Mode (same as late normal rounds). */
-export const ENDLESS_LOSS_LIVES = 2;
+export const ENDLESS_LOSS_LIVES = 3;
 
 /** One full playthrough: shop state, team, lives and wins. Pure logic, no rendering. */
 export class Run {
@@ -312,7 +317,7 @@ export class Run {
   sell(teamIndex: number): boolean {
     const unit = this.team[teamIndex];
     if (!unit) return false;
-    this.gold += sellValue(getDef(unit.defId).rarity, unit.level) + (this.fx.sellBonus ?? 0) + this.meta.sellBonus;
+    this.gold += this.sellPrice(unit);
     // Sell abilities fire while the squad is still in place (so 'next to it' works), then it leaves.
     this.fireShopTrigger(unit, 'sell');
     this.team[teamIndex] = null;
@@ -419,6 +424,11 @@ export class Run {
     return report;
   }
 
+  /** Gold you get for selling a squad (incl. commander and upgrade bonuses). */
+  sellPrice(u: TeamUnit): number {
+    return sellValue(getDef(u.defId).rarity, u.xp) + (this.fx.sellBonus ?? 0) + this.meta.sellBonus;
+  }
+
   /** Price of a creature for this run (commander discounts applied). */
   priceOf(defId: string): number {
     const d = this.fx.elementDiscount;
@@ -451,7 +461,7 @@ export class Run {
     if (this.endless) {
       if (result === 'lose') this.lives = Math.max(0, this.lives - ENDLESS_LOSS_LIVES);
     } else if (result === 'lose') {
-      this.lives = Math.max(0, this.lives - (this.round <= 2 ? 1 : 2));
+      this.lives = Math.max(0, this.lives - livesLost(this.round));
     }
     this.round++;
     this.startTurn(result);

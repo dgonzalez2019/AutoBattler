@@ -31,7 +31,7 @@ npm run build    # production build into dist/
   - Winning a battle pays +1.
   - Some commanders, permanent upgrades and economy creatures add more.
   - The shop shows what next turn will pay and how much more you need to save for the next interest step.
-- **Shop:** a reroll costs 1, and selling refunds `level + rarity - 1` gold. You can freeze a shop slot to keep it for later.
+- **Shop:** a reroll costs 1, and selling refunds 75% of the gold you put into the squad, counting every merged copy (a Common sells for 2, a Legendary for 6). You can freeze a shop slot to keep it for later.
   - The shop has 3 slots at first, 4 from round 3 and 5 from round 7.
   - Odds shift toward rarer creatures each round. Round 1 is all Commons; by round 11 it's 20 / 25 / 30 / 18 / 7%. See `src/data/rarity.ts`.
 - **Merging:** drop a duplicate squad onto its twin. Each merge gives +1 attack and +2 health per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. Ability numbers multiply by level.
@@ -46,7 +46,7 @@ npm run build    # production build into dist/
   - Endless pays its own extra rewards when it ends.
   - In the playtest, no Endless run got past round 40.
 - **Opponents:** AI armies are built through the real shop with the same gold you have, so they're always armies a player could have at that round. Rounds 1 to 3 are easier: the AI plays loosely and some early opponents spend less of their gold. In the playtest, rounds 1 and 2 are won about 75% of the time, round 3 about 55%.
-- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You have 5 lives and win the run at 10 wins. See [Online matchmaking](#online-matchmaking).
+- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You start with 15 lives and win the run at 10 wins. A loss costs 1 life in rounds 1 to 4, 2 lives in rounds 5 to 8, and 3 lives after that. See [Online matchmaking](#online-matchmaking).
 
 ### Synergies
 

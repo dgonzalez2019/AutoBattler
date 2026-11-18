@@ -124,8 +124,8 @@ const list: CommanderDef[] = [
   },
   {
     id: 'prime', name: 'Overseer Prime', title: 'Ancient AI', unlockLevel: 14, price: 600, color: 0x06d6a0,
-    passive: 'Start the run with 7 lives instead of 5.',
-    effects: { startLives: 7 },
+    passive: 'Start the run with 20 lives instead of 15.',
+    effects: { startLives: 20 },
     look: 'ancient artificial intelligence shown as a floating chrome head with a glowing green core and cables',
   },
 ];

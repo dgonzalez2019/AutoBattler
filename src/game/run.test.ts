@@ -38,18 +38,18 @@ describe('Run', () => {
     expect(run.shop[0]!.frozen).toBe(true);
   });
 
-  it('sell refunds gold by level', () => {
-    const run = new Run(1);
+  it('sell refunds 75% of the gold put in, counting merged copies', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
     run.team[0] = { defId: 'drone', atk: 1, hp: 1, level: 2, xp: 2 };
     run.gold = 0;
     run.sell(0);
-    expect(run.gold).toBe(2); // level 2 Common
+    expect(run.gold).toBe(6); // 3 copies x 3g x 75%
   });
 
   it('tracks wins, lives and game end', () => {
-    const run = new Run(1);
+    const run = new Run({ seed: 1, commander: 'rook' });
     run.finishBattle('lose');
-    expect(run.lives).toBe(4);
+    expect(run.lives).toBe(14);
     for (let i = 0; i < 10; i++) run.finishBattle('win');
     expect(run.status).toBe('won');
   });

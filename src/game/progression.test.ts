@@ -78,7 +78,7 @@ describe('commanders', () => {
     expect(zix.gold).toBe(g);
     expect(zix.rerollCost).toBe(1);
     expect(new Run({ seed: 1, commander: 'orin' }).shopSize).toBe(4);
-    expect(new Run({ seed: 1, commander: 'prime' }).lives).toBe(7);
+    expect(new Run({ seed: 1, commander: 'prime' }).lives).toBe(20);
     const nova = new Run({ seed: 1, commander: 'nova' });
     nova.gold = 0;
     nova.finishBattle('win'); // round 2: base 10 + win 1 + Nova 1
@@ -212,15 +212,15 @@ describe('Endless Mode', () => {
 });
 
 describe('Endless lives', () => {
-  it('Endless is harsh: a loss costs 2 lives and wins never restore them', () => {
+  it('Endless is harsh: a loss costs 3 lives and wins never restore them', () => {
     const run = new Run({ seed: 1, commander: 'rook' });
     for (let i = 0; i < 10; i++) run.finishBattle('win');
     run.continueEndless();
     const start = run.lives;
     run.finishBattle('lose');
-    expect(run.lives).toBe(start - 2);
+    expect(run.lives).toBe(start - 3);
     for (let i = 0; i < 8; i++) run.finishBattle('win');
-    expect(run.lives).toBe(start - 2);
+    expect(run.lives).toBe(start - 3);
   });
 });
 
@@ -253,5 +253,13 @@ describe('economy', () => {
     expect(run.projectedIncome.interest).toBe(3);
     run.gold = 4;
     expect(run.projectedIncome.interest).toBe(0);
+  });
+});
+
+describe('lives', () => {
+  it('start at 15; a loss costs 1 life early, 2 mid-game and 3 late', async () => {
+    const { livesLost } = await import('./run');
+    expect(new Run({ seed: 1, commander: 'rook' }).lives).toBe(15);
+    expect([1, 4, 5, 8, 9, 15].map(livesLost)).toEqual([1, 1, 2, 2, 3, 3]);
   });
 });

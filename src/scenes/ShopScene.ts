@@ -10,7 +10,7 @@ import { opponents } from '../game/matchmaking';
 import { endlessPower, ENDLESS_SCALING_FROM } from '../game/ai';
 import { playerName } from '../game/player';
 import { ENDLESS_FINAL_ROUND, INTEREST_PER, MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, WINS_TO_VICTORY } from '../game/run';
-import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity';
+import { hexColor, RARITIES, RARITY, shopOdds } from '../data/rarity';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
 import { button, drawBackground, panel, toast, wait, type Button } from '../ui/widgets';
@@ -244,7 +244,7 @@ export class ShopScene extends Phaser.Scene {
     this.btn.freeze.setLabel(sel?.kind === 'shop' && run.shop[sel.index]?.frozen ? 'Unfreeze' : 'Freeze');
     this.btn.sell.setEnabled(sel?.kind === 'team');
     const sellUnit = sel?.kind === 'team' ? run.team[sel.index] : null;
-    this.btn.sell.setLabel(sellUnit ? `Sell  +${sellValue(getDef(sellUnit.defId).rarity, sellUnit.level)}g` : 'Sell');
+    this.btn.sell.setLabel(sellUnit ? `Sell  +${run.sellPrice(sellUnit)}g` : 'Sell');
     this.renderOdds();
 
     this.renderSynergies();
