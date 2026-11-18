@@ -48,8 +48,16 @@ export function botTurn(run: Run, rng: Rng, mem: BotMemory, skill = 1) {
     run.buyModule(m.id);
   }
 
+  // Economy: from round 3 a good player banks gold for interest, and only dips
+  // into the reserve for strong buys (merges, on-plan creatures).
+  const reserve = run.round >= 3 && smart() ? 10 : 0;
+  const STRONG = 9;
+
   for (let guard = 0; guard < 30; guard++) {
-    const affordable = run.shop.map((s, i) => ({ s, i })).filter(({ s, i }) => s && run.gold >= run.cost(i));
+    const affordable = run.shop
+      .map((s, i) => ({ s, i }))
+      .filter(({ s, i }) => s && run.gold >= run.cost(i))
+      .filter(({ s, i }) => run.gold - run.cost(i) >= reserve || value(run, s!.unit.defId, mem.focus) >= STRONG);
     const ranked = affordable.map((o) => ({ ...o, v: value(run, o.s!.unit.defId, mem.focus) })).sort((a, b) => b.v - a.v);
     const best = smart() ? ranked[0] : affordable.length ? { ...rng.pick(affordable), v: 0 } : undefined;
     if (best) {
@@ -68,7 +76,7 @@ export function botTurn(run: Run, rng: Rng, mem: BotMemory, skill = 1) {
       }
       if (slot >= 0 && run.buy(best.i, slot)) continue;
     }
-    if ((run.gold >= REROLL_COST + 3 && smart()) || run.rerollCost === 0) {
+    if ((run.gold - REROLL_COST >= reserve + 3 && smart()) || run.rerollCost === 0) {
       run.reroll();
       continue;
     }

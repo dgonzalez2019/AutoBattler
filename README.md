@@ -26,7 +26,12 @@ npm run build    # production build into dist/
   | Legendary | 8g | 1 powerhouse | 1 + 1 |
 
 - **Squads:** each shop purchase is a squad. Your army has 5 squad slots, and the front slot deploys closest to the enemy.
-- **Shop:** you get 10 gold every turn. A reroll costs 1, and selling refunds `level + rarity - 1` gold. You can freeze a shop slot to keep it for later.
+- **Economy:** gold carries over between turns.
+  - Each turn you earn **base income** (10 on round 1, then 7 rising to 10 by round 8) plus **interest**: +1 for every 5 gold you saved, up to +3.
+  - Winning a battle pays +1.
+  - The Reactor, some commanders and economy creatures add more.
+  - The shop shows what next turn will pay and how much more you need to save for the next interest step.
+- **Shop:** a reroll costs 1, and selling refunds `level + rarity - 1` gold. You can freeze a shop slot to keep it for later.
   - The shop has 3 slots at first, 4 from round 3 and 5 from round 7.
   - Odds shift toward rarer creatures each round. Round 1 is all Commons; by round 11 it's 20 / 25 / 30 / 18 / 7%. See `src/data/rarity.ts`.
 - **Merging:** drop a duplicate squad onto its twin. Each merge gives +1 attack and +2 health per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. Ability numbers multiply by level.
@@ -36,12 +41,11 @@ npm run build    # production build into dist/
   - Armory: more attack.
   - Shield Bay: more health.
   - Reactor: more gold each turn.
-- **Winning and Endless Mode:** reaching 10 wins is a victory. The championship and its rewards are banked immediately, then you choose to finish the run or continue with your army in Endless Mode.
-  - Endless runs until your lives run out, or until you survive round 50 and conquer it (big XP and Stardust bonus).
-  - In Endless, a loss costs 1 life, and every 4 endless wins restores a life (up to your starting lives).
-  - From round 14, AI enemies gain +4% attack and health per round (`endlessPower` in `src/game/ai.ts`).
-  - Endless pays its own rewards when it ends, and your best record and conquests are saved.
-  - Playtest (`ENDLESS=1 npm run playtest`): champions continuing last a median of 7 to 8 extra wins, about 1 in 5 reach round 30, and about 4% conquer round 50.
+- **Winning and Endless Mode:** reaching 10 wins ends the game as a victory, with your rewards banked on the spot. You can then optionally carry on with the same army in Endless Mode.
+  - Endless is a bonus mode with a hard cap at round 50, which is not meant to be reached.
+  - Losses cost 2 lives, and from round 14 AI enemies gain +8% attack and health per round (`endlessPower` in `src/game/ai.ts`).
+  - Endless pays its own extra rewards when it ends.
+  - In the playtest, no Endless run got past round 40.
 - **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You have 5 lives and win the run at 10 wins. See [Online matchmaking](#online-matchmaking).
 
 ### Synergies

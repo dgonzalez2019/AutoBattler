@@ -81,8 +81,9 @@ describe('commanders', () => {
     expect(new Run({ seed: 1, commander: 'orin' }).shopSize).toBe(4);
     expect(new Run({ seed: 1, commander: 'prime' }).lives).toBe(7);
     const nova = new Run({ seed: 1, commander: 'nova' });
-    nova.finishBattle('win');
-    expect(nova.gold).toBe(11);
+    nova.gold = 0;
+    nova.finishBattle('win'); // round 2: base 7 + win 1 + Nova 1
+    expect(nova.gold).toBe(9);
   });
 
   it('economy creatures bank gold for next turn', () => {
@@ -90,8 +91,9 @@ describe('commanders', () => {
     run.team[0] = { defId: 'sparkplug', atk: 2, hp: 6, level: 2, xp: 2 };
     run.endTurn();
     expect(run.bankedGold).toBe(2);
-    run.finishBattle('win');
-    expect(run.gold).toBe(12);
+    run.gold = 0;
+    run.finishBattle('win'); // base 7 + win 1 + banked 2
+    expect(run.gold).toBe(10);
   });
 
   it('Thalia buffs Bio creatures on buy', () => {
@@ -175,8 +177,8 @@ describe('Endless Mode', () => {
   it('enemy power ramps up after normal runs would end', async () => {
     const { endlessPower, ENDLESS_SCALING_FROM, generateOpponent } = await import('./ai');
     expect(endlessPower(ENDLESS_SCALING_FROM - 1)).toBe(1);
-    expect(endlessPower(ENDLESS_SCALING_FROM)).toBeCloseTo(1.04);
-    expect(endlessPower(ENDLESS_SCALING_FROM + 9)).toBeCloseTo(1.4);
+    expect(endlessPower(ENDLESS_SCALING_FROM)).toBeCloseTo(1.08);
+    expect(endlessPower(ENDLESS_SCALING_FROM + 9)).toBeCloseTo(1.8);
     const late = generateOpponent(30, 5);
     expect(late.squads.length).toBe(5);
   });
@@ -211,18 +213,46 @@ describe('Endless Mode', () => {
 });
 
 describe('Endless lives', () => {
-  it('losses cost 1 life and every 4 endless wins restores one', () => {
+  it('Endless is harsh: a loss costs 2 lives and wins never restore them', () => {
     const run = new Run({ seed: 1, commander: 'rook' });
     for (let i = 0; i < 10; i++) run.finishBattle('win');
     run.continueEndless();
     const start = run.lives;
     run.finishBattle('lose');
-    expect(run.lives).toBe(start - 1);
-    for (let i = 0; i < 3; i++) run.finishBattle('win');
-    expect(run.lives).toBe(start - 1);
-    run.finishBattle('win'); // 4th endless win
-    expect(run.lives).toBe(start);
+    expect(run.lives).toBe(start - 2);
     for (let i = 0; i < 8; i++) run.finishBattle('win');
-    expect(run.lives).toBeLessThanOrEqual(run.maxLives);
+    expect(run.lives).toBe(start - 2);
+  });
+});
+
+describe('economy', () => {
+  it('base income starts at 10, dips to 7 and climbs back to 10', async () => {
+    const { baseIncome } = await import('./run');
+    expect([1, 2, 3, 4, 6, 8, 12].map(baseIncome)).toEqual([10, 7, 7, 8, 9, 10, 10]);
+  });
+
+  it('interest: +1 per 5 gold saved, max +3', async () => {
+    const { interestOn } = await import('./run');
+    expect([0, 4, 5, 9, 10, 15, 40].map(interestOn)).toEqual([0, 0, 1, 1, 2, 3, 3]);
+  });
+
+  it('unspent gold carries over and earns interest; wins pay a bonus', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
+    expect(run.gold).toBe(10); // round 1
+    run.gold = 12; // saved
+    run.finishBattle('win'); // round 2: 12 + base 7 + interest 2 + win 1
+    expect(run.gold).toBe(22);
+    expect(run.lastIncome).toMatchObject({ base: 7, interest: 2, win: 1, total: 10 });
+    run.gold = 3;
+    run.finishBattle('lose'); // round 3: 3 + 7 + 0
+    expect(run.gold).toBe(10);
+  });
+
+  it('projected income shows what saving earns', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
+    run.gold = 15;
+    expect(run.projectedIncome.interest).toBe(3);
+    run.gold = 4;
+    expect(run.projectedIncome.interest).toBe(0);
   });
 });

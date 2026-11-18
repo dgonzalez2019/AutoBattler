@@ -21,9 +21,9 @@ export function aiSkill(round: number): number {
 
 /** First round where enemies start gaining Endless power. Normal runs end before this. */
 export const ENDLESS_SCALING_FROM = 14;
-const ENDLESS_STEP = 0.04;
+const ENDLESS_STEP = 0.08;
 
-/** Stat multiplier for AI armies at a round (1 = none). +4% per round from round 14. */
+/** Stat multiplier for AI armies at a round (1 = none). +8% per round from round 14. */
 export function endlessPower(round: number): number {
   return 1 + ENDLESS_STEP * Math.max(0, round - ENDLESS_SCALING_FROM + 1);
 }

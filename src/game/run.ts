@@ -24,6 +24,31 @@ export interface ShopSlot {
 }
 
 export const START_GOLD = 10;
+/** Gold can be saved between turns, up to this much. */
+export const MAX_GOLD = 99;
+/** Interest: +1 gold per this much saved, up to MAX_INTEREST. */
+export const INTEREST_PER = 5;
+export const MAX_INTEREST = 3;
+/** Extra gold after winning a battle. */
+export const WIN_BONUS = 1;
+
+/** Base income at the start of a round: 10 on round 1, then 7 rising to 10 by round 8. */
+export function baseIncome(round: number): number {
+  return round <= 1 ? START_GOLD : Math.min(10, 6 + Math.floor(round / 2));
+}
+
+export function interestOn(saved: number): number {
+  return Math.min(MAX_INTEREST, Math.floor(Math.max(0, saved) / INTEREST_PER));
+}
+
+export interface Income {
+  base: number;
+  interest: number;
+  win: number;
+  /** Reactor, commander perks and banked gold. */
+  bonus: number;
+  total: number;
+}
 export const REROLL_COST = 1;
 export const START_LIVES = 5;
 export const WINS_TO_VICTORY = 10;
@@ -71,19 +96,20 @@ export interface RunOptions {
  */
 export type RunStatus = 'playing' | 'won' | 'lost' | 'conquered';
 
-/** Endless Mode's finish line: survive through this round to conquer it. */
+/**
+ * Hard cap on Endless Mode. It's a ceiling, not a goal: enemies scale so hard
+ * that runs are expected to end well before it (see the playtest).
+ */
 export const ENDLESS_FINAL_ROUND = 50;
-/** Lives lost per defeat in Endless Mode. */
-export const ENDLESS_LOSS_LIVES = 1;
-/** Every this many endless wins restores one life (up to your starting lives). */
-export const ENDLESS_LIFE_EVERY = 4;
+/** Lives lost per defeat in Endless Mode (same as late normal rounds). */
+export const ENDLESS_LOSS_LIVES = 2;
 
 /** One full playthrough: shop state, team, lives and wins. Pure logic, no rendering. */
 export class Run {
   round = 1;
   lives = START_LIVES;
   wins = 0;
-  gold = START_GOLD;
+  gold = 0;
   /** Index 0 is the front of the team. */
   team: (TeamUnit | null)[] = Array(MAX_SQUADS).fill(null);
   modules: ModuleLevels = emptyModules();
@@ -126,12 +152,37 @@ export class Run {
     return this.freeRerolls > 0 ? 0 : REROLL_COST;
   }
 
-  private startTurn() {
-    this.gold = this.turnGold + this.bankedGold;
-    if (this.fx.goldEveryOtherRound && this.round % 2 === 0) this.gold += this.fx.goldEveryOtherRound;
+  /** What the coming turn pays, given the gold you hold now. */
+  incomeFor(round: number, saved: number, won: boolean): Income {
+    const income: Income = {
+      base: baseIncome(round),
+      interest: round > 1 ? interestOn(saved) : 0,
+      win: won ? WIN_BONUS : 0,
+      bonus:
+        moduleBonus('reactor', this.modules.reactor) +
+        (this.fx.goldEveryOtherRound && round % 2 === 0 ? this.fx.goldEveryOtherRound : 0) +
+        this.bankedGold,
+      total: 0,
+    };
+    income.total = income.base + income.interest + income.win + income.bonus;
+    return income;
+  }
+
+  /** Income you'd get next turn if you stopped spending now (for the shop UI). */
+  get projectedIncome(): Income {
+    return this.incomeFor(this.round + 1, this.gold, false);
+  }
+
+  /** Start a shop turn: unspent gold carries over, plus income and interest. */
+  private startTurn(lastResult?: BattleResult) {
+    this.lastIncome = this.incomeFor(this.round, this.gold, lastResult === 'win');
+    this.gold = Math.min(MAX_GOLD, this.gold + this.lastIncome.total);
     this.bankedGold = 0;
     this.freeRerolls = this.fx.freeRerollsPerTurn ?? 0;
   }
+
+  /** Breakdown of the gold received at the start of this turn. */
+  lastIncome: Income | null = null;
 
   /** Continued past 10 wins: the run only ends when lives run out. */
   endless = false;
@@ -314,10 +365,6 @@ export class Run {
     }
   }
 
-  get turnGold(): number {
-    return START_GOLD + moduleBonus('reactor', this.modules.reactor);
-  }
-
   moduleCost(id: ModuleId): number | null {
     const def = MODULES.find((m) => m.id === id)!;
     const lvl = this.modules[id];
@@ -355,16 +402,12 @@ export class Run {
     this.lastResult = result;
     if (result === 'win') this.wins++;
     if (this.endless) {
-      // Endless: gentler losses, and a life back every few wins, so long streaks are possible.
       if (result === 'lose') this.lives = Math.max(0, this.lives - ENDLESS_LOSS_LIVES);
-      if (result === 'win' && this.endlessWins > 0 && this.endlessWins % ENDLESS_LIFE_EVERY === 0) {
-        this.lives = Math.min(this.maxLives, this.lives + 1);
-      }
     } else if (result === 'lose') {
       this.lives = Math.max(0, this.lives - (this.round <= 2 ? 1 : 2));
     }
     this.round++;
-    this.startTurn();
+    this.startTurn(result);
     this.refillShop(false);
   }
 

@@ -73,8 +73,9 @@ describe('Mothership', () => {
   it('reactor adds gold each turn', () => {
     const run = new Run({ seed: 1, commander: 'rook' }); // Rook has no gold perk
     run.modules.reactor = 1;
-    run.finishBattle('win');
-    expect(run.gold).toBe(START_GOLD + 1);
+    run.gold = 0;
+    run.finishBattle('win'); // base 7 + win 1 + reactor 1
+    expect(run.gold).toBe(9);
   });
 
   it('snapshot lists squads front first with modules', () => {

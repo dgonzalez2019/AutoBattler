@@ -10,7 +10,7 @@ import { opponents } from '../game/matchmaking';
 import { endlessPower, ENDLESS_SCALING_FROM } from '../game/ai';
 import { playerName } from '../game/player';
 import { MODULES, moduleText } from '../game/mothership';
-import { ENDLESS_FINAL_ROUND, MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
+import { ENDLESS_FINAL_ROUND, INTEREST_PER, MAX_INTEREST, MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
 import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
@@ -44,6 +44,7 @@ export class ShopScene extends Phaser.Scene {
   private syn!: Phaser.GameObjects.Container;
   private trait: TraitId | null = null;
   private showCommander = false;
+  private incomeText!: Phaser.GameObjects.Text;
   /** Creature previewed from a trait's sprite grid. */
   private preview: string | null = null;
   private busy = false;
@@ -78,6 +79,9 @@ export class ShopScene extends Phaser.Scene {
     this.trait = null;
     this.showCommander = false;
     this.commanderChip();
+    this.incomeText = this.add
+      .text(345, 88, '', { fontFamily: FONT_BODY, fontSize: '12px', fontStyle: 'bold', color: '#ffd166' })
+      .setOrigin(0.5, 0.5);
     if (this.run.endless) {
       const power = Math.round((endlessPower(this.run.round) - 1) * 100);
       this.add
@@ -108,7 +112,11 @@ export class ShopScene extends Phaser.Scene {
 
     if (this.run.lastResult) {
       const msg = { win: 'Victory!', lose: 'Defeat...', draw: 'Draw' }[this.run.lastResult];
-      toast(this, `${msg}  Round ${this.run.round} begins`);
+      const inc = this.run.lastIncome;
+      const parts = inc
+        ? [`${inc.base} income`, inc.interest && `${inc.interest} interest`, inc.win && `${inc.win} win bonus`, inc.bonus && `${inc.bonus} bonus`].filter(Boolean)
+        : [];
+      toast(this, `${msg}  Round ${this.run.round}  ·  +${inc?.total ?? 0} gold (${parts.join(' + ')})`);
     }
   }
 
@@ -155,6 +163,14 @@ export class ShopScene extends Phaser.Scene {
     this.dyn.removeAll(true);
 
     this.hud.gold.setText(String(run.gold));
+    // Economy hint: what next turn pays if you stop spending now.
+    const next = run.projectedIncome;
+    const toNext = INTEREST_PER - (run.gold % INTEREST_PER);
+    this.incomeText.setText(
+      `Next turn +${next.total}` +
+        (next.interest ? `  (interest +${next.interest})` : '') +
+        (next.interest < MAX_INTEREST ? `  ·  save ${toNext} more for +1` : '  ·  max interest'),
+    );
     this.hud.lives.setText(String(run.lives));
     this.hud.wins.setText(run.endless ? String(run.wins) : `${run.wins}/${WINS_TO_VICTORY}`);
     this.hud.round.setText(String(run.round));
@@ -452,7 +468,7 @@ export class ShopScene extends Phaser.Scene {
           .text(
             0,
             42,
-            'Buy squads and drag them into your army. Drop a duplicate onto its twin to level it up.\n\nBuild around SYNERGIES: shared elements and classes unlock big bonuses. Tap a synergy for details.\n\nElements also form a type wheel: Plasma > Mech > Cryo > Bio > Void > Plasma (x1.5 damage).',
+            'Buy squads and drag them into your army. Drop a duplicate onto its twin to level it up.\n\nGold carries over: every 5 you save earns +1 interest next turn (max +3).\n\nBuild around SYNERGIES: shared elements and classes unlock big bonuses. Tap a synergy for details.\n\nElements also form a type wheel: Plasma > Mech > Cryo > Bio > Void > Plasma (x1.5 damage).',
             style(15, COLORS.textDim),
           )
           .setOrigin(0.5, 0)
