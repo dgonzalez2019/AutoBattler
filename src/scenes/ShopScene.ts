@@ -7,6 +7,7 @@ import { CLASS_INFO, TRAITS, type TraitId } from '../data/traits';
 import { ALL_TRAITS, computeTraits } from '../game/synergy';
 import { squadCount } from '../game/army';
 import { opponents } from '../game/matchmaking';
+import { endlessPower, ENDLESS_SCALING_FROM } from '../game/ai';
 import { playerName } from '../game/player';
 import { MODULES, moduleText } from '../game/mothership';
 import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
@@ -77,6 +78,17 @@ export class ShopScene extends Phaser.Scene {
     this.trait = null;
     this.showCommander = false;
     this.commanderChip();
+    if (this.run.endless) {
+      const power = Math.round((endlessPower(this.run.round) - 1) * 100);
+      this.add
+        .text(
+          640,
+          118,
+          `ENDLESS MODE  ·  ${this.run.endlessWins} endless wins  ·  ${power > 0 ? `enemy power +${power}%` : `enemies start powering up at round ${ENDLESS_SCALING_FROM}`}`,
+          { fontFamily: FONT_DISPLAY, fontSize: '16px', color: '#e0aaff', backgroundColor: '#3a0ca3', padding: { x: 14, y: 5 } },
+        )
+        .setOrigin(0.5);
+    }
 
     panel(this, INFO_X, 380, 300, 470);
     this.info = this.add.container(INFO_X, 160);
@@ -144,7 +156,7 @@ export class ShopScene extends Phaser.Scene {
 
     this.hud.gold.setText(String(run.gold));
     this.hud.lives.setText(String(run.lives));
-    this.hud.wins.setText(`${run.wins}/${WINS_TO_VICTORY}`);
+    this.hud.wins.setText(run.endless ? String(run.wins) : `${run.wins}/${WINS_TO_VICTORY}`);
     this.hud.round.setText(String(run.round));
 
     // Team slots

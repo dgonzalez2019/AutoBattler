@@ -87,6 +87,7 @@ export class Run {
 
   constructor(opts: RunOptions | number = {}) {
     const o = typeof opts === 'number' ? { seed: opts } : opts;
+    this.endless = false;
     this.rng = new Rng(o.seed ?? randomSeed());
     this.commander = getCommander(o.commander);
     const pool = (o.pool ?? SHOP_POOL.map((c) => c.id)).map((id) => CREATURES[id]).filter((c) => c && !c.token);
@@ -121,7 +122,20 @@ export class Run {
     this.freeRerolls = this.fx.freeRerollsPerTurn ?? 0;
   }
 
+  /** Continued past 10 wins: the run only ends when lives run out. */
+  endless = false;
+  /** Wins at the moment Endless Mode started (always WINS_TO_VICTORY). */
+  get endlessWins(): number {
+    return this.endless ? Math.max(0, this.wins - WINS_TO_VICTORY) : 0;
+  }
+
+  /** Keep playing after becoming champion. */
+  continueEndless() {
+    if (this.wins >= WINS_TO_VICTORY) this.endless = true;
+  }
+
   get status(): RunStatus {
+    if (this.endless) return this.lives <= 0 ? 'lost' : 'playing';
     if (this.wins >= WINS_TO_VICTORY) return 'won';
     if (this.lives <= 0) return 'lost';
     return 'playing';

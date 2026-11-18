@@ -5,8 +5,8 @@ import { emptyModules, MODULES, type ModuleLevels } from './mothership';
 import { MAX_SQUADS } from './run';
 
 /** Generous caps: anything above these can't be reached by normal play. */
-const MAX_ATK = 200;
-const MAX_HP = 600;
+const MAX_ATK = 2000;
+const MAX_HP = 8000;
 
 const int = (v: unknown, lo: number, hi: number): number | null =>
   typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : null;
@@ -42,8 +42,8 @@ export function parseArmy(raw: unknown): ArmySnapshot | null {
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : 'Unknown Commander';
   return {
     name,
-    round: int(r.round, 1, 40) ?? 1,
-    wins: int(r.wins, 0, 10) ?? 0,
+    round: int(r.round, 1, 999) ?? 1,
+    wins: int(r.wins, 0, 999) ?? 0,
     lives: int(r.lives, 0, 7) ?? 0,
     squads,
     modules,

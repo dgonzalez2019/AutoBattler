@@ -112,12 +112,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawHeader(data: BattleInit, round: number) {
+    const run: Run = this.registry.get('run');
     const name = (x: number, text: string, color: string, originX: number) =>
       this.add.text(x, 36, text, { fontFamily: FONT_DISPLAY, fontSize: '24px', color }).setOrigin(originX, 0.5).setDepth(950);
     name(40, data.player.name.toUpperCase(), '#4cc9f0', 0);
     name(W - 40, data.enemy.name.toUpperCase(), '#ef476f', 1);
     this.add
-      .text(W / 2, 36, `ROUND ${round}`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffffff' })
+      .text(W / 2, 36, run.endless ? `ROUND ${round}  ·  ENDLESS` : `ROUND ${round}`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffffff' })
       .setOrigin(0.5)
       .setDepth(950);
     const countStyle = { fontFamily: FONT_BODY, fontSize: '18px', fontStyle: 'bold', color: '#e8ecff' };

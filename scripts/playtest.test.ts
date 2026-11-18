@@ -46,14 +46,16 @@ interface Tally {
 
 function playRuns(bot: Bot, pool: string[], label: string, seed0: number) {
   const byRound = new Map<number, Tally>();
-  const finals: { wins: number; rounds: number; champion: boolean }[] = [];
+  const finals: { wins: number; rounds: number; champion: boolean; endless: number }[] = [];
   let battles = 0;
   for (let r = 0; r < RUNS; r++) {
     const rng = new Rng(seed0 + r * 7919);
     const commander = rng.pick(COMMANDER_LIST).id;
     const run = new Run({ seed: seed0 + r, commander, pool });
     const mem: { focus?: TraitId } = {};
-    while (run.status === 'playing' && run.round <= 30) {
+    while (run.round <= 80) {
+      if (run.status === 'won' && process.env.ENDLESS) run.continueEndless();
+      if (run.status !== 'playing') break;
       bot(run, rng, mem);
       run.endTurn();
       if (!run.team.some(Boolean)) {
@@ -71,7 +73,7 @@ function playRuns(bot: Bot, pool: string[], label: string, seed0: number) {
       byRound.set(run.round, t);
       run.finishBattle(result);
     }
-    finals.push({ wins: run.wins, rounds: run.round - 1, champion: run.status === 'won' });
+    finals.push({ wins: run.wins, rounds: run.round - 1, champion: run.wins >= 10, endless: run.endlessWins });
   }
   const pct = (t: Tally) => Math.round((100 * (t.w + t.d / 2)) / Math.max(1, t.w + t.l + t.d));
   const rows = [...byRound.entries()]
@@ -81,8 +83,13 @@ function playRuns(bot: Bot, pool: string[], label: string, seed0: number) {
   const avgWins = finals.reduce((a, f) => a + f.wins, 0) / finals.length;
   const champs = finals.filter((f) => f.champion).length;
   const avgRounds = finals.reduce((a, f) => a + f.rounds, 0) / finals.length;
+  const endlessRuns = finals.filter((f) => f.champion).map((f) => f.endless).sort((a, b) => a - b);
+  const endlessLine = endlessRuns.length
+    ? `   endless (champions continuing): median ${endlessRuns[Math.floor(endlessRuns.length / 2)]} extra wins, best ${endlessRuns[endlessRuns.length - 1]}, worst ${endlessRuns[0]}`
+    : '   endless: no champions';
   return [
     `== ${label}: ${RUNS} runs, ${battles} battles`,
+    ...(process.env.ENDLESS ? [endlessLine] : []),
     `   avg wins ${avgWins.toFixed(1)}/10, champions ${Math.round((100 * champs) / RUNS)}%, avg run length ${avgRounds.toFixed(1)} rounds`,
     ...rows.map((r) => '   ' + r),
   ].join('\n');

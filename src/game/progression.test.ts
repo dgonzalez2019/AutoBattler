@@ -147,3 +147,48 @@ describe('AI opponents', () => {
     expect(generateOpponent(6, 42)).toEqual(generateOpponent(6, 42));
   });
 });
+
+describe('Endless Mode', () => {
+  it('10 wins is a win until you continue; then the run ends only on lives', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
+    for (let i = 0; i < 10; i++) run.finishBattle('win');
+    expect(run.status).toBe('won');
+    run.continueEndless();
+    expect(run.endless).toBe(true);
+    expect(run.status).toBe('playing');
+    run.finishBattle('win');
+    run.finishBattle('win');
+    expect(run.wins).toBe(12);
+    expect(run.endlessWins).toBe(2);
+    expect(run.status).toBe('playing');
+    while (run.lives > 0) run.finishBattle('lose');
+    expect(run.status).toBe('lost');
+  });
+
+  it('cannot start Endless before becoming champion', () => {
+    const run = new Run({ seed: 1, commander: 'rook' });
+    run.finishBattle('win');
+    run.continueEndless();
+    expect(run.endless).toBe(false);
+  });
+
+  it('enemy power ramps up after normal runs would end', async () => {
+    const { endlessPower, ENDLESS_SCALING_FROM, generateOpponent } = await import('./ai');
+    expect(endlessPower(ENDLESS_SCALING_FROM - 1)).toBe(1);
+    expect(endlessPower(ENDLESS_SCALING_FROM)).toBeCloseTo(1.06);
+    expect(endlessPower(ENDLESS_SCALING_FROM + 9)).toBeCloseTo(1.6);
+    const late = generateOpponent(30, 5);
+    expect(late.squads.length).toBe(5);
+  });
+
+  it('endless wins pay extra and record your best', () => {
+    const p = fresh();
+    const plain = runRewards({ wins: 10, rounds: 12, champion: true });
+    const endless = runRewards({ wins: 15, rounds: 17, champion: true, endlessWins: 5 });
+    expect(endless.xp).toBeGreaterThan(plain.xp);
+    expect(endless.stardust).toBeGreaterThan(plain.stardust);
+    p.finishRun({ wins: 15, rounds: 17, champion: true, endlessWins: 5 });
+    expect(p.data.stats.bestEndless).toBe(5);
+    expect(p.data.stats.champions).toBe(1);
+  });
+});

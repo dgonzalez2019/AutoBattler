@@ -19,6 +19,15 @@ export function aiSkill(round: number): number {
   return Math.min(1, 0.4 + round * 0.1);
 }
 
+/** First round where enemies start gaining Endless power. Normal runs end before this. */
+export const ENDLESS_SCALING_FROM = 14;
+const ENDLESS_STEP = 0.06;
+
+/** Stat multiplier for AI armies at a round (1 = none). +6% per round from round 14. */
+export function endlessPower(round: number): number {
+  return 1 + ENDLESS_STEP * Math.max(0, round - ENDLESS_SCALING_FROM + 1);
+}
+
 /**
  * An AI army for this round, built the way a player builds one: same starting
  * gold, same shop and odds, same rules. A bot plays every shop turn from round 1
@@ -35,6 +44,11 @@ export function generateOpponent(round: number, seed: number): ArmySnapshot {
     if (r < round) run.finishBattle('draw'); // advance the turn without touching lives
   }
   const snap = run.snapshot(botName(rng));
+  // Endless: past the point where armies max out, enemies keep getting stronger.
+  const power = endlessPower(round);
+  if (power > 1) {
+    snap.squads = snap.squads.map((q) => ({ ...q, atk: Math.round(q.atk * power), hp: Math.round(q.hp * power) }));
+  }
   // A plausible record for an opponent still in the run at this round.
   snap.wins = rng.int(Math.min(10, round));
   snap.lives = Math.max(1, run.maxLives - rng.int(Math.min(run.maxLives, round)));

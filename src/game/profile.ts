@@ -16,7 +16,7 @@ export interface ProfileData {
   /** Creatures unlocked beyond the base roster. */
   creatures: string[];
   selectedCommander: string;
-  stats: { runs: number; wins: number; champions: number; bestWins: number };
+  stats: { runs: number; wins: number; champions: number; bestWins: number; bestEndless: number };
   /** Creatures unlocked since the player last opened the collection. */
   fresh: string[];
 }
@@ -39,7 +39,7 @@ export function newProfile(): ProfileData {
     commanders: COMMANDER_LIST.filter((c) => c.unlockLevel <= 1).map((c) => c.id),
     creatures: [],
     selectedCommander: DEFAULT_COMMANDER,
-    stats: { runs: 0, wins: 0, champions: 0, bestWins: 0 },
+    stats: { runs: 0, wins: 0, champions: 0, bestWins: 0, bestEndless: 0 },
     fresh: [],
   };
 }
@@ -64,7 +64,8 @@ function sanitize(raw: unknown): ProfileData {
       runs: num(st.runs, 0, 1e7, 0),
       wins: num(st.wins, 0, 1e7, 0),
       champions: num(st.champions, 0, 1e7, 0),
-      bestWins: num(st.bestWins, 0, 10, 0),
+      bestWins: num(st.bestWins, 0, 9999, 0),
+      bestEndless: num(st.bestEndless, 0, 9999, 0),
     };
   }
   // Level unlocks are always granted, even if the save missed them.
@@ -162,6 +163,7 @@ export class Profile {
     d.stats.runs++;
     d.stats.wins += summary.wins;
     d.stats.bestWins = Math.max(d.stats.bestWins, summary.wins);
+    if (summary.endlessWins) d.stats.bestEndless = Math.max(d.stats.bestEndless, summary.endlessWins);
     if (summary.champion) d.stats.champions++;
     d.stardust += rewards.stardust;
     d.xp += rewards.xp;

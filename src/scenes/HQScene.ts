@@ -336,6 +336,7 @@ export class HQScene extends Phaser.Scene {
     const prof = profile();
     this.registry.set('run', new Run({ commander: prof.data.selectedCommander, pool: prof.shopPool() }));
     this.registry.set('rewarded', false);
+    this.registry.set('claimed', false);
     this.cameras.main.fadeOut(250);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Shop'));
   }

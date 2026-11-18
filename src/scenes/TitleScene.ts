@@ -94,6 +94,11 @@ export class TitleScene extends Phaser.Scene {
       .text(W - 270, 45, `Commander Lv ${p.level}`, { fontFamily: FONT_BODY, fontSize: '15px', fontStyle: 'bold', color: '#e8ecff' })
       .setOrigin(0, 0.5);
     stardustIcon(this, W - 112, 45, 10);
+    if (p.stats.bestEndless > 0) {
+      this.add
+        .text(W - 175, 86, `Best Endless: ${p.stats.bestEndless} wins`, { fontFamily: FONT_BODY, fontSize: '14px', fontStyle: 'bold', color: '#c77dff' })
+        .setOrigin(0.5);
+    }
     this.add.text(W - 96, 45, String(p.stardust), { fontFamily: FONT_DISPLAY, fontSize: '20px', color: '#e0aaff' }).setOrigin(0, 0.5);
     const cmd = getCommander(p.selectedCommander);
     commanderBadge(this, 60, 45, cmd.id, cmd.color, 56);

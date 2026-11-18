@@ -13,6 +13,8 @@ export interface RunSummary {
   wins: number;
   rounds: number;
   champion: boolean;
+  /** Wins earned in Endless Mode (after the 10th). */
+  endlessWins?: number;
 }
 
 export interface RunRewards {
@@ -23,8 +25,8 @@ export interface RunRewards {
 /** What a finished run is worth. Every run earns something, even a quick loss. */
 export function runRewards(r: RunSummary): RunRewards {
   return {
-    xp: 15 + r.wins * 12 + r.rounds * 4 + (r.champion ? 60 : 0),
-    stardust: 10 + r.wins * 15 + (r.champion ? 100 : 0),
+    xp: 15 + r.wins * 12 + r.rounds * 4 + (r.champion ? 60 : 0) + (r.endlessWins ?? 0) * 8,
+    stardust: 10 + r.wins * 15 + (r.champion ? 100 : 0) + (r.endlessWins ?? 0) * 10,
   };
 }
 
