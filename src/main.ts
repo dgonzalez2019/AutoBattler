@@ -9,7 +9,8 @@ import { GameOverScene } from './scenes/GameOverScene';
 import { HQScene } from './scenes/HQScene';
 import { ShopScene } from './scenes/ShopScene';
 import { TitleScene } from './scenes/TitleScene';
-import { H, W } from './ui/theme';
+import { H } from './ui/theme';
+import { viewWidth, watchWindow } from './ui/viewport';
 
 async function start() {
   // Make sure web fonts are ready before Phaser rasterizes any text.
@@ -20,10 +21,10 @@ async function start() {
   ]);
 
   // Exposed for automated browser tests and debugging.
-  (window as unknown as { __game: Phaser.Game }).__game = new Phaser.Game({
+  const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
-    width: W,
+    width: viewWidth(),
     height: H,
     backgroundColor: '#0b0f1e',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -31,6 +32,9 @@ async function start() {
     input: { activePointers: 2 },
     scene: [BootScene, TitleScene, HQScene, ShopScene, BattleScene, GameOverScene],
   });
+  watchWindow(game);
+  // Exposed for automated browser tests and debugging.
+  (window as unknown as { __game: Phaser.Game }).__game = game;
 }
 
 void start();

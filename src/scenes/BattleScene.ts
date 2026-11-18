@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BLEED, fitCamera } from '../ui/viewport';
 import { artScale, creatureKey } from '../art/creatureArt';
 import { getDef } from '../data/creatures';
 import { ELEMENT_INFO } from '../data/elements';
@@ -75,6 +76,7 @@ export class BattleScene extends Phaser.Scene {
 
     const run: Run = this.registry.get('run');
     drawBackground(this, run.round * 7 + 3);
+    fitCamera(this);
     this.cameras.main.fadeIn(250);
     this.drawArena();
 
@@ -140,7 +142,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private intro(data: BattleInit) {
-    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setDepth(980);
+    const shade = this.add.rectangle(W / 2, H / 2, W + BLEED * 2, H, 0x000000, 0.6).setDepth(980);
     const vs = this.add
       .text(W / 2, H / 2, 'VS', { fontFamily: FONT_DISPLAY, fontSize: '110px', color: '#ffd166', stroke: '#000000', strokeThickness: 10 })
       .setOrigin(0.5)
@@ -405,7 +407,7 @@ export class BattleScene extends Phaser.Scene {
     const label = { win: 'VICTORY', lose: 'DEFEAT', draw: 'DRAW' }[result];
     const color = { win: '#06d6a0', lose: '#ef476f', draw: '#ffd166' }[result];
 
-    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0).setDepth(990);
+    const shade = this.add.rectangle(W / 2, H / 2, W + BLEED * 2, H, 0x000000, 0).setDepth(990);
     this.tweens.add({ targets: shade, fillAlpha: 0.55, duration: 300 });
     const title = this.add
       .text(W / 2, H / 2 - 30, label, { fontFamily: FONT_DISPLAY, fontSize: '96px', color, stroke: '#000000', strokeThickness: 10 })

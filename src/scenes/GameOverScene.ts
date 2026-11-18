@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { fitCamera } from '../ui/viewport';
 import { commanderBadge } from '../art/commanderArt';
 import { artScale, creatureKey } from '../art/creatureArt';
 import { COMMANDERS } from '../data/commanders';
@@ -20,6 +21,7 @@ export class GameOverScene extends Phaser.Scene {
     const run: Run = this.registry.get('run');
     const won = run.status === 'won';
     drawBackground(this, 99);
+    fitCamera(this);
     this.cameras.main.fadeIn(250);
 
     // Bank rewards exactly once per run.

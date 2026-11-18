@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { fitCamera, isIOS, isStandalone } from '../ui/viewport';
 import { artScale, creatureKey } from '../art/creatureArt';
 import { onlineEnabled } from '../config';
 import { playerName, setPlayerName } from '../game/player';
@@ -18,6 +19,7 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     drawBackground(this, 42);
+    fitCamera(this);
     const lineup = ['sparkit', 'frostling', 'quasarion', 'bryobit', 'nullmite'];
     lineup.forEach((id, i) => {
       const x = W / 2 + (i - 2) * 170;
@@ -59,6 +61,28 @@ export class TitleScene extends Phaser.Scene {
         color: onlineEnabled() ? '#06d6a0' : '#9aa3c7',
       })
       .setOrigin(0.5);
+
+    // Fullscreen: a button where the browser allows it; on iPhone, explain Add to Home Screen.
+    if (!isStandalone()) {
+      if (this.scale.fullscreen.available) {
+        const fs = button(this, W - 100, H - 40, 170, 46, 'Fullscreen', 0x3a86ff, () => {
+          if (this.scale.isFullscreen) this.scale.stopFullscreen();
+          else this.scale.startFullscreen();
+        });
+        this.scale.on('enterfullscreen', () => fs.setLabel('Exit Full'));
+        this.scale.on('leavefullscreen', () => fs.setLabel('Fullscreen'));
+        this.events.once('shutdown', () => this.scale.off('enterfullscreen').off('leavefullscreen'));
+      } else if (isIOS()) {
+        this.add
+          .text(W / 2, 270, 'Tip: tap Share, then "Add to Home Screen" to play fullscreen', {
+            fontFamily: FONT_BODY,
+            fontSize: '17px',
+            fontStyle: 'bold',
+            color: '#ffd166',
+          })
+          .setOrigin(0.5);
+      }
+    }
 
     // Profile summary
     const p = profile().data;

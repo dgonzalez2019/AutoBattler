@@ -1,0 +1,16 @@
+{
+  "name": "AutoBattler",
+  "short_name": "AutoBattler",
+  "description": "Build an army of alien creatures and battle other commanders.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0f1e",
+  "theme_color": "#0b0f1e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

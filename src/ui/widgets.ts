@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, FONT_BODY, FONT_DISPLAY, H, W } from './theme';
+import { BLEED } from './viewport';
 
 export function tween(scene: Phaser.Scene, config: Phaser.Types.Tweens.TweenBuilderConfig): Promise<void> {
   return new Promise((resolve) => scene.tweens.add({ ...config, onComplete: () => resolve() }));
@@ -13,16 +14,16 @@ export function wait(scene: Phaser.Scene, ms: number): Promise<void> {
 export function drawBackground(scene: Phaser.Scene, seed = 1) {
   const g = scene.add.graphics().setDepth(-100);
   g.fillGradientStyle(COLORS.bgTop, COLORS.bgTop, COLORS.bgBottom, COLORS.bgBottom, 1);
-  g.fillRect(0, 0, W, H);
+  g.fillRect(-BLEED, 0, W + BLEED * 2, H);
   const rnd = new Phaser.Math.RandomDataGenerator([String(seed)]);
   const nebulas = [0x7b2cbf, 0x4cc9f0, 0xff6a3d];
   for (let i = 0; i < 9; i++) {
     g.fillStyle(nebulas[i % 3], 0.05);
-    g.fillCircle(rnd.between(0, W), rnd.between(0, H), rnd.between(120, 300));
+    g.fillCircle(rnd.between(-BLEED / 2, W + BLEED / 2), rnd.between(0, H), rnd.between(120, 300));
   }
-  for (let i = 0; i < 140; i++) {
+  for (let i = 0; i < 260; i++) {
     const star = scene.add
-      .circle(rnd.between(0, W), rnd.between(0, H), rnd.realInRange(0.6, 1.8), 0xffffff, rnd.realInRange(0.3, 0.9))
+      .circle(rnd.between(-BLEED, W + BLEED), rnd.between(0, H), rnd.realInRange(0.6, 1.8), 0xffffff, rnd.realInRange(0.3, 0.9))
       .setDepth(-99);
     if (i % 4 === 0) {
       scene.tweens.add({ targets: star, alpha: 0.1, duration: rnd.between(900, 2600), yoyo: true, repeat: -1 });

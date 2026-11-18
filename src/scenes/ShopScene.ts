@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BLEED, fitCamera } from '../ui/viewport';
 import { abilityTexts, CREATURES, getDef } from '../data/creatures';
 import { EVOLVE_BONUS, evolves, formName } from '../data/evolutions';
 import { ELEMENT_INFO } from '../data/elements';
@@ -56,6 +57,7 @@ export class ShopScene extends Phaser.Scene {
     this.ship = null;
     this.busy = false;
     drawBackground(this, this.run.round);
+    fitCamera(this);
 
     // HUD
     this.hud = {
@@ -336,7 +338,7 @@ export class ShopScene extends Phaser.Scene {
       v.setScale(1.1);
     });
     v.on('drag', (_p: Phaser.Input.Pointer, dx: number, dy: number) => v.setPosition(dx, dy));
-    v.on('dragend', (p: Phaser.Input.Pointer) => this.onDrop(sel, p.x, p.y));
+    v.on('dragend', (p: Phaser.Input.Pointer) => this.onDrop(sel, p.worldX, p.worldY));
     v.on('pointerup', () => {
       if (dragged) return;
       if (sel.kind === 'shop') this.onTapShop(sel.index);
@@ -592,7 +594,7 @@ export class ShopScene extends Phaser.Scene {
     const cx = 640;
     const cy = 330;
     const layer = this.add.container(0, 0).setDepth(500);
-    const shade = this.add.rectangle(640, 360, 1280, 720, 0x05060f, 0).setInteractive();
+    const shade = this.add.rectangle(640, 360, 1280 + BLEED * 2, 720, 0x05060f, 0).setInteractive();
     layer.add(shade);
     this.tweens.add({ targets: shade, fillAlpha: 0.88, duration: 250 });
     const glow = this.add.circle(cx, cy, 120, ELEMENT_INFO[def.element].color, 0.2);
@@ -709,7 +711,7 @@ export class ShopScene extends Phaser.Scene {
     this.ship?.destroy();
     const c = this.add.container(0, 0).setDepth(200);
     this.ship = c;
-    const shade = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.7).setInteractive();
+    const shade = this.add.rectangle(640, 360, 1280 + BLEED * 2, 720, 0x000000, 0.7).setInteractive();
     shade.on('pointerup', () => this.closeMothership());
     const bg = panel(this, 640, 375, 820, 560, 0.98);
     const block = this.add.zone(640, 375, 820, 560).setInteractive(); // swallow taps on the panel

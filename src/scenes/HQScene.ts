@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { fitCamera } from '../ui/viewport';
 import { commanderBadge } from '../art/commanderArt';
 import { artScale, creatureKey } from '../art/creatureArt';
 import { COMMANDER_LIST, COMMANDERS, getCommander } from '../data/commanders';
@@ -49,6 +50,7 @@ export class HQScene extends Phaser.Scene {
     this.header = [];
     this.picked = null;
     drawBackground(this, 77);
+    fitCamera(this);
     this.cameras.main.fadeIn(200);
 
     button(this, 90, 44, 140, 50, 'Back', 0x5c677d, () => this.scene.start('Title'));
