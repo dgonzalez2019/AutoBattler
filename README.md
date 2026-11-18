@@ -76,7 +76,7 @@ Elements also form a type wheel: Plasma > Mech > Cryo > Bio > Void > Plasma. A s
 |---|---|
 | `src/data/` | Creature roster (`creatures.ts`) and the type wheel (`elements.ts`). Balance changes go here. |
 | `src/sim/` | Deterministic real-time battlefield simulator (`field.ts`). It uses a fixed 20 Hz tick and resolves all hits in a tick together. Same armies and seed always give the same battle. It has no rendering code, so it can also run on a server to validate PvP results. |
-| `src/game/` | Run state (shop, gold, lives, merging), army snapshots, the Mothership, matchmaking and AI armies. |
+| `src/game/` | Run state (shop, gold, lives, merging), army snapshots, profile and permanent upgrades, matchmaking and AI armies. |
 | `src/scenes/` | Phaser screens: Title, Shop, Battle and GameOver. |
 | `src/ui/` | Shared widgets and the `CreatureView` sprite with its stat badges. |
 | `src/art/` | Art loader. |
