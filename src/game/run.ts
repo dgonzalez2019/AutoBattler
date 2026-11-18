@@ -5,7 +5,7 @@ import { RARITY, rollRarity, sellValue } from '../data/rarity';
 import type { BattleResult } from '../sim/field';
 import { Rng, randomSeed } from '../sim/rng';
 import type { ArmySnapshot, SquadSpec } from './army';
-import { emptyModules, MODULES, moduleBonus, type ModuleId, type ModuleLevels } from './mothership';
+import { emptyModules, MODULES, REACTOR_GOLD, SCANNER_ROUNDS, SCANNER_SLOTS, type ModuleId, type ModuleLevels } from './mothership';
 
 export const MAX_SQUADS = 5;
 /** Chance each shop slot offers another copy of a creature already in your army. */
@@ -159,7 +159,7 @@ export class Run {
       interest: round > 1 ? interestOn(saved) : 0,
       win: won ? WIN_BONUS : 0,
       bonus:
-        moduleBonus('reactor', this.modules.reactor) +
+        REACTOR_GOLD[this.modules.reactor] +
         (this.fx.goldEveryOtherRound && round % 2 === 0 ? this.fx.goldEveryOtherRound : 0) +
         this.bankedGold,
       total: 0,
@@ -218,7 +218,7 @@ export class Run {
   }
 
   get shopSize(): number {
-    return (this.round >= 7 ? 5 : this.round >= 3 ? 4 : 3) + (this.fx.extraShopSlot ?? 0);
+    return (this.round >= 7 ? 5 : this.round >= 3 ? 4 : 3) + (this.fx.extraShopSlot ?? 0) + SCANNER_SLOTS[this.modules.scanner];
   }
 
   private rollUnit(): TeamUnit {
@@ -229,7 +229,8 @@ export class Run {
       const d = getDef(this.rng.pick(owned).defId);
       return { defId: d.id, atk: d.atk, hp: d.hp, level: 1, xp: 0 };
     }
-    const def = rollCreature(this.rng, this.round, this.pool);
+    // Scanner: shop rolls with the odds of a later round.
+    const def = rollCreature(this.rng, this.round + SCANNER_ROUNDS[this.modules.scanner], this.pool);
     return { defId: def.id, atk: def.atk, hp: def.hp, level: 1, xp: 0 };
   }
 
@@ -368,7 +369,7 @@ export class Run {
   moduleCost(id: ModuleId): number | null {
     const def = MODULES.find((m) => m.id === id)!;
     const lvl = this.modules[id];
-    return lvl >= def.maxLevel ? null : Math.max(1, def.costs[lvl] - (this.fx.moduleDiscount ?? 0));
+    return lvl >= def.costs.length ? null : Math.max(1, def.costs[lvl] - (this.fx.moduleDiscount ?? 0));
   }
 
   buyModule(id: ModuleId): boolean {

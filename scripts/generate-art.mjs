@@ -201,6 +201,34 @@ async function generateEvolutions(stages, only, force) {
   }
 }
 
+// ── Mothership ────────────────────────────────────────────
+async function generateMothership() {
+  const prompt = [
+    'Original spaceship art for a sci-fi monster-collecting autobattler game: the player\'s MOTHERSHIP, a large carrier home base.',
+    'Style: polished 2D game art, glossy cel shading, bold clean dark outline, vibrant colors, matching cute-but-cool creature art.',
+    'Sleek rounded hull in white and deep purple with cyan glowing engines, hangar bays, a big dish antenna, a turret cannon and a medical module with a green cross light.',
+    'Side view, flying toward the RIGHT, slightly from above, centered, whole ship visible. Fully transparent background, no text, no stars, no scenery.',
+  ].join(' ');
+  const res = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: MODEL, prompt, size: '1536x1024', background: 'transparent', quality: 'medium', n: 1 }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(`mothership: ${res.status} ${JSON.stringify(body.error ?? body)}`);
+  const png = Buffer.from(body.data[0].b64_json, 'base64');
+  await mkdir(RAW, { recursive: true });
+  await writeFile(new URL('mothership.png', RAW), png);
+  const out = await sharp(png)
+    .trim({ threshold: 10 })
+    .resize(480, 320, { fit: 'contain', kernel: 'lanczos3', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .flop() // the model drew it facing left; the game wants it facing right
+    .webp({ quality: 92, alphaQuality: 100 })
+    .toBuffer();
+  await writeFile(new URL('../src/assets/mothership.webp', import.meta.url), out);
+  console.log('ok mothership');
+}
+
 // ── Main (kept last so every definition above is initialised) ──
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -208,6 +236,11 @@ const force = args.includes('--force');
 if (args.includes('--evolutions')) {
   const stages = args.includes('--stage3') ? [3] : args.includes('--stage2') ? [2] : [2, 3];
   await generateEvolutions(stages, args.filter((a) => !a.startsWith('--')), force);
+  process.exit(0);
+}
+
+if (args.includes('--mothership')) {
+  await generateMothership();
   process.exit(0);
 }
 

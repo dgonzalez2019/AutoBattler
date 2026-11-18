@@ -37,7 +37,7 @@ export function parseArmy(raw: unknown): ArmySnapshot | null {
 
   const modules: ModuleLevels = emptyModules();
   const mods = (army.modules ?? {}) as Record<string, unknown>;
-  for (const m of MODULES) modules[m.id] = int(mods[m.id], 0, m.maxLevel) ?? 0;
+  for (const m of MODULES) modules[m.id] = int(mods[m.id], 0, m.costs.length) ?? 0;
 
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : 'Unknown Commander';
   return {

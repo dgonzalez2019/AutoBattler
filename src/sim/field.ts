@@ -2,7 +2,7 @@ import { getDef, scaled, type Ability, type Effect, type Target, type Trigger } 
 import { typeMultiplier, type Element } from '../data/elements';
 import type { CreatureClass, TraitLevels } from '../data/traits';
 import { squadCount, type ArmySnapshot } from '../game/army';
-import { moduleBonus } from '../game/mothership';
+import { ARMORY_PCT, MEDBAY, ORBITAL, SHIELD_PCT } from '../game/mothership';
 import { computeTraits } from '../game/synergy';
 import { getCommander, type CommanderEffects } from '../data/commanders';
 import { Rng } from './rng';
@@ -116,7 +116,10 @@ export type FieldEvent =
   | { t: 'heal'; id: number; amount: number }
   | { t: 'shield'; id: number; amount: number }
   | { t: 'shieldBreak'; id: number }
-  | { t: 'status'; id: number; kind: 'burn' | 'chill' };
+  | { t: 'status'; id: number; kind: 'burn' | 'chill' }
+  /** Mothership weapons: which units they hit/healed this tick. */
+  | { t: 'orbital'; side: Side; ids: number[] }
+  | { t: 'medbay'; side: Side; ids: number[] };
 
 interface PendingHit {
   targetId: number;
@@ -169,8 +172,7 @@ export class FieldBattle {
   // ── Setup ───────────────────────────────────────────────
 
   private deploy(army: ArmySnapshot, side: Side) {
-    const bonusAtk = moduleBonus('armory', army.modules.armory);
-    const bonusHp = moduleBonus('shields', army.modules.shields);
+    const armory = ARMORY_PCT[army.modules.armory ?? 0];
     const tr = this.traits[side];
     let cursor = FIELD_W / 2 - 110; // front edge, moving backward
     army.squads.forEach((sq, squadIdx) => {
@@ -187,7 +189,17 @@ export class FieldBattle {
         const inCol = Math.min(rows, count - col * rows);
         const x = Math.max(20, cursor - col * COL_GAP);
         const y = FIELD_H / 2 + (row - (inCol - 1) / 2) * ROW_GAP + (col % 2) * 10;
-        this.spawn(side, sq.defId, sq.level, squadIdx, side === 0 ? x : FIELD_W - x, y, sq.atk + bonusAtk, sq.hp + bonusHp + frontHp);
+        this.spawn(
+          side,
+          sq.defId,
+          sq.level,
+          squadIdx,
+          side === 0 ? x : FIELD_W - x,
+          y,
+          // Armory: +10% attack per level, at least +1.
+          armory ? Math.max(sq.atk + 1, Math.round(sq.atk * (1 + armory))) : sq.atk,
+          sq.hp + frontHp,
+        );
       }
       cursor -= cols * COL_GAP + 22;
     });
@@ -253,6 +265,9 @@ export class FieldBattle {
     }
     const fx = this.cmd[side];
     if (u.element === 'mech' && fx.mechShield) u.shield += fx.mechShield;
+    // Mothership Shield Bay: every creature starts shielded.
+    const bay = SHIELD_PCT[this.armies[side].modules.shields ?? 0];
+    if (bay) u.shield += Math.round(u.maxHp * bay);
     if (fx.classAtk && u.cls === fx.classAtk.cls) u.atk += fx.classAtk.atk;
     if (u.cls === 'gunner' && tr.gunner) {
       u.atk += 1;
@@ -287,6 +302,7 @@ export class FieldBattle {
       if (u.alive && !u.ranged && u.targetId) this.engaged.set(u.targetId, (this.engaged.get(u.targetId) ?? 0) + 1);
     }
     for (const u of list) if (u.alive) this.think(u);
+    this.fireMotherships();
     this.moveProjectiles();
     const hits = this.pending;
     this.pending = [];
@@ -463,6 +479,40 @@ export class FieldBattle {
     const b = this.aliveCount(1);
     if (!a || !b) this.result = a ? 'win' : b ? 'lose' : 'draw';
     else if (this.time >= TIME_LIMIT) this.result = 'draw';
+  }
+
+  // ── Mothership weapons ──────────────────────────────────
+
+  private weaponTime: [number, number] = [0, 0];
+
+  /** Orbital Cannon strikes random enemies; Med Bay heals the most injured allies. */
+  private fireMotherships() {
+    this.weaponTime[0] += DT;
+    this.weaponTime[1] += DT;
+    // Alternate which side goes first so neither always shoots first.
+    const sides: Side[] = this.tick % 2 ? [0, 1] : [1, 0];
+    for (const side of sides) {
+      const mods = this.armies[side].modules;
+      const t = Math.round(this.weaponTime[side] / DT);
+      const orb = mods.orbital ?? 0;
+      if (orb && t % Math.round(ORBITAL.every / DT) === 0) {
+        const targets = this.pickRandom(
+          this.units.filter((o) => o.alive && o.side !== side),
+          ORBITAL.targets[orb],
+        );
+        this.events.push({ t: 'orbital', side, ids: targets.map((o) => o.id) });
+        for (const o of targets) this.damage(o, ORBITAL.damage[orb], { ability: true });
+      }
+      const med = mods.medbay ?? 0;
+      if (med && t % Math.round(MEDBAY.every / DT) === 0) {
+        const hurt = this.units
+          .filter((o) => o.alive && o.side === side && o.hp < o.maxHp)
+          .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp || a.id - b.id)
+          .slice(0, MEDBAY.targets[med]);
+        if (hurt.length) this.events.push({ t: 'medbay', side, ids: hurt.map((o) => o.id) });
+        for (const o of hurt) this.heal(o, MEDBAY.heal[med], false);
+      }
+    }
   }
 
   // ── Damage ──────────────────────────────────────────────

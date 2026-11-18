@@ -36,11 +36,12 @@ npm run build    # production build into dist/
   - Odds shift toward rarer creatures each round. Round 1 is all Commons; by round 11 it's 20 / 25 / 30 / 18 / 7%. See `src/data/rarity.ts`.
 - **Merging:** drop a duplicate squad onto its twin. Each merge gives +1 attack and +2 health per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. Ability numbers multiply by level.
 - **Battle:** both armies charge across a real-time battlefield. Abilities trigger on start of battle, attack, hurt, faint, kill or a timer ("every 4s"). Some trigger in the shop instead: on buy, sell or end of turn.
-- **Mothership:** your home base, upgraded with shop gold for the whole run.
-  - Barracks: bigger squads.
-  - Armory: more attack.
-  - Shield Bay: more health.
-  - Reactor: more gold each turn.
+- **Mothership:** your home base, upgraded with shop gold (3 / 5 / 7 per level). Upgrades last the whole run, and your ship hovers over the battlefield firing its weapons.
+  - **Economy:** Reactor (+1 / 2 / 4 gold a turn).
+  - **Shop:** Scanner (shop rolls 1 to 3 rounds ahead; +1 shop slot from level 2).
+  - **Army:** Barracks (+25 / 50 / 75% squad size), Armory (+15 / 30 / 45% attack), Shield Bay (start with a shield of 15 / 30 / 45% of health).
+  - **Weapons:** Orbital Cannon (laser strikes every 5s), Med Bay (heals your most injured every 4s).
+  - In an A/B playtest, smart play with upgrades became champion 28 to 32% of the time, versus 23% without.
 - **Winning and Endless Mode:** reaching 10 wins ends the game as a victory, with your rewards banked on the spot. You can then optionally carry on with the same army in Endless Mode.
   - Endless is a bonus mode with a hard cap at round 50, which is not meant to be reached.
   - Losses cost 2 lives, and from round 14 AI enemies gain +8% attack and health per round (`endlessPower` in `src/game/ai.ts`).

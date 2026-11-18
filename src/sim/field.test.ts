@@ -29,7 +29,8 @@ describe('squads', () => {
     expect(squadCount('bryobit', 1)).toBe(6);
     expect(squadCount('bryobit', 2)).toBe(9);
     expect(squadCount('bryobit', 3)).toBe(12);
-    expect(squadCount('bryobit', 1, 2)).toBe(9);
+    expect(squadCount('bryobit', 1, 2)).toBe(9); // Barracks 2: +50%
+    expect(squadCount('phoenyx', 1, 3)).toBe(1); // Legendaries stay solo
     expect(squadCount('mechadon', 1)).toBe(2);
   });
 
@@ -69,12 +70,12 @@ describe('FieldBattle', () => {
   });
 
   it('mothership armory and shields boost units', () => {
-    const mods = { ...emptyModules(), armory: 2, shields: 1 };
-    const b = new FieldBattle([army([sq('gearhound', 3, 3)], mods), army([sq('gearhound', 3, 3)])], 1);
+    const mods = { ...emptyModules(), armory: 2, shields: 2 };
+    const b = new FieldBattle([army([sq('gearhound', 10, 30)], mods), army([sq('gearhound', 10, 30)])], 1);
     const mine = b.units.find((u) => u.side === 0)!;
     const theirs = b.units.find((u) => u.side === 1)!;
-    expect(mine.atk).toBe(theirs.atk + 2);
-    expect(mine.maxHp).toBeGreaterThan(theirs.maxHp);
+    expect(mine.atk).toBe(13); // Armory 2: +30%
+    expect(mine.shield - theirs.shield).toBe(9); // Shield Bay 2: 30% of 30 health
   });
 
   it('faint summons tokens onto the field', () => {
@@ -90,5 +91,24 @@ describe('FieldBattle', () => {
         expect(['win', 'lose', 'draw']).toContain(b.runToEnd());
       }
     }
+  });
+});
+
+describe('Mothership weapons', () => {
+  it('Orbital Cannon strikes enemies every 6s; Med Bay heals every 5s', () => {
+    const mods = { ...emptyModules(), orbital: 2, medbay: 1 };
+    const b = new FieldBattle([army([sq('glaciarch', 1, 400)], mods), army([sq('glaciarch', 1, 400), sq('thornback', 1, 400)])], 1);
+    let strikes = 0;
+    let heals = 0;
+    for (let i = 0; i < 260 && !b.result; i++) {
+      b.step();
+      for (const e of b.events) {
+        if (e.t === 'orbital' && e.side === 0) strikes += e.ids.length;
+        if (e.t === 'medbay' && e.side === 0) heals++;
+      }
+      b.events = [];
+    }
+    expect(strikes).toBeGreaterThanOrEqual(3 * 2); // ~13s: two volleys of 3
+    expect(heals).toBeGreaterThanOrEqual(1);
   });
 });

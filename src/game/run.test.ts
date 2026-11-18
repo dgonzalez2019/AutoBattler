@@ -65,9 +65,10 @@ describe('Mothership', () => {
     run.gold = 100;
     expect(run.buyModule('reactor')).toBe(true);
     expect(run.buyModule('reactor')).toBe(true);
+    expect(run.buyModule('reactor')).toBe(true);
     expect(run.buyModule('reactor')).toBe(false);
-    expect(run.modules.reactor).toBe(2);
-    expect(run.gold).toBe(100 - 5 - 8);
+    expect(run.modules.reactor).toBe(3);
+    expect(run.gold).toBe(100 - 3 - 5 - 7);
   });
 
   it('reactor adds gold each turn', () => {
@@ -87,5 +88,31 @@ describe('Mothership', () => {
     expect(snap.squads.map((s) => s.defId)).toEqual(['gearhound', 'drone']);
     expect(snap.modules.armory).toBe(1);
     expect(snap.round).toBe(1);
+  });
+});
+
+describe('Scanner', () => {
+  it('shop rolls rarer creatures sooner and gains a slot at level 2', async () => {
+    const { Rng } = await import('../sim/rng');
+    const { getDef } = await import('../data/creatures');
+    const avg = (scanner: number) => {
+      let total = 0;
+      for (let s = 0; s < 60; s++) {
+        const run = new Run({ seed: s, commander: 'rook' });
+        run.round = 3;
+        run.modules.scanner = scanner;
+        run.gold = 99;
+        run.reroll();
+        total += run.shop.reduce((a, slot) => a + getDef(slot!.unit.defId).rarity, 0) / run.shop.length;
+      }
+      void Rng;
+      return total / 60;
+    };
+    expect(avg(3)).toBeGreaterThan(avg(0) + 0.3);
+    const run = new Run({ seed: 1, commander: 'rook' });
+    run.round = 3;
+    const before = run.shopSize;
+    run.modules.scanner = 2;
+    expect(run.shopSize).toBe(before + 1);
   });
 });

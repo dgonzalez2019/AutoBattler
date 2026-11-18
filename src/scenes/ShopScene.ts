@@ -44,6 +44,7 @@ export class ShopScene extends Phaser.Scene {
   private syn!: Phaser.GameObjects.Container;
   private trait: TraitId | null = null;
   private showCommander = false;
+  private shipBtn!: Button;
   private incomeText!: Phaser.GameObjects.Text;
   /** Creature previewed from a trait's sprite grid. */
   private preview: string | null = null;
@@ -104,7 +105,7 @@ export class ShopScene extends Phaser.Scene {
       sell: button(this, 620, 672, 200, 60, 'Sell', 0xef476f, () => this.onSell()),
       end: button(this, INFO_X, 672, 280, 64, 'BATTLE!', 0x06d6a0, () => void this.onEndTurn()),
     };
-    button(this, INFO_X, 48, 280, 54, 'MOTHERSHIP', 0x7b2cbf, () => this.openMothership());
+    this.shipBtn = button(this, INFO_X, 48, 280, 54, 'MOTHERSHIP', 0x7b2cbf, () => this.openMothership());
 
     this.dyn = this.add.container(0, 0);
     this.input.dragDistanceThreshold = 10;
@@ -163,6 +164,8 @@ export class ShopScene extends Phaser.Scene {
     this.dyn.removeAll(true);
 
     this.hud.gold.setText(String(run.gold));
+    const built = Object.values(run.modules).reduce((a, b) => a + b, 0);
+    this.shipBtn.setLabel(built ? `MOTHERSHIP  ·  ${built}` : 'MOTHERSHIP');
     // Economy hint: what next turn pays if you stop spending now.
     const next = run.projectedIncome;
     const toNext = INTEREST_PER - (run.gold % INTEREST_PER);
@@ -735,50 +738,86 @@ export class ShopScene extends Phaser.Scene {
 
   // ── Mothership ───────────────────────────────────────────
 
+  /** Full-screen hangar: the ship on the left, the seven modules as cards on the right. */
   private openMothership() {
     this.ship?.destroy();
     const c = this.add.container(0, 0).setDepth(200);
     this.ship = c;
-    const shade = this.add.rectangle(640, 360, 1280 + BLEED * 2, 720, 0x000000, 0.7).setInteractive();
+    const shade = this.add.rectangle(640, 360, 1280 + BLEED * 2, 720, 0x05060f, 0.82).setInteractive();
     shade.on('pointerup', () => this.closeMothership());
-    const bg = panel(this, 640, 375, 820, 560, 0.98);
-    const block = this.add.zone(640, 375, 820, 560).setInteractive(); // swallow taps on the panel
+    const bg = panel(this, 640, 372, 1240, 680, 0.98);
+    const block = this.add.zone(640, 372, 1240, 680).setInteractive(); // swallow taps on the panel
     c.add([shade, bg, block]);
-    c.add(
-      this.add.text(640, 130, 'MOTHERSHIP', { fontFamily: FONT_DISPLAY, fontSize: '38px', color: '#e0aaff' }).setOrigin(0.5),
-    );
-    c.add(
-      this.add
-        .text(640, 172, `Upgrades last for the whole run  ·  ${this.run.gold} gold`, {
-          fontFamily: FONT_BODY,
-          fontSize: '18px',
-          fontStyle: 'bold',
-          color: COLORS.textDim,
-        })
-        .setOrigin(0.5),
-    );
 
+    // Ship column
+    const built = Object.values(this.run.modules).reduce((a, b) => a + b, 0);
+    const shipImg = this.add.image(180, 260, 'mothership').setScale(300 / 480);
+    this.tweens.add({ targets: shipImg, y: 250, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    c.add([
+      this.add.text(180, 92, 'MOTHERSHIP', { fontFamily: FONT_DISPLAY, fontSize: '34px', color: '#e0aaff' }).setOrigin(0.5),
+      shipImg,
+      this.add
+        .text(180, 380, `${built} / ${MODULES.length * 3} upgrades`, { fontFamily: FONT_DISPLAY, fontSize: '20px', color: '#ffffff' })
+        .setOrigin(0.5),
+      this.add
+        .text(180, 414, `${this.run.gold} gold`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffd166' })
+        .setOrigin(0.5),
+      this.add
+        .text(
+          180,
+          450,
+          'Upgrades last for the whole run. Weapons fire during every battle, and your ship hovers over the battlefield.',
+          { fontFamily: FONT_BODY, fontSize: '14px', color: COLORS.textDim, align: 'center', wordWrap: { width: 260 } },
+        )
+        .setOrigin(0.5, 0),
+    ]);
+
+    // Module cards: 2 columns x 4 rows
     MODULES.forEach((m, i) => {
-      const y = 240 + i * 100;
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = 340 + col * 470;
+      const y = 60 + row * 158;
       const lvl = this.run.modules[m.id];
+      const maxed = lvl >= m.costs.length;
       const g = this.add.graphics();
-      g.fillStyle(COLORS.panelLight, 0.6).fillRoundedRect(260, y - 40, 760, 84, 16);
-      g.fillStyle(m.color).fillCircle(306, y + 2, 22);
-      g.lineStyle(3, 0xffffff, 0.8).strokeCircle(306, y + 2, 22);
-      for (let p = 0; p < m.maxLevel; p++) {
-        g.fillStyle(p < lvl ? m.color : 0x000000, p < lvl ? 1 : 0.45).fillRoundedRect(350 + p * 30, y + 16, 24, 9, 4);
+      g.fillStyle(COLORS.panelLight, lvl ? 0.75 : 0.45).fillRoundedRect(x, y, 450, 146, 16);
+      g.lineStyle(lvl ? 3 : 2, m.color, lvl ? 1 : 0.5).strokeRoundedRect(x, y, 450, 146, 16);
+      for (let p = 0; p < m.costs.length; p++) {
+        g.fillStyle(p < lvl ? m.color : 0x000000, p < lvl ? 1 : 0.45).fillRoundedRect(x + 340 + p * 34, y + 18, 28, 10, 5);
       }
       c.add(g);
-      c.add(this.add.text(350, y - 26, m.name, { fontFamily: FONT_DISPLAY, fontSize: '24px', color: '#ffffff' }));
-      const now = lvl > 0 ? moduleText(m, lvl) : 'Not built';
+      c.add(this.add.text(x + 18, y + 12, m.name, { fontFamily: FONT_DISPLAY, fontSize: '22px', color: '#ffffff' }));
       c.add(
-        this.add.text(480, y + 10, now, { fontFamily: FONT_BODY, fontSize: '17px', fontStyle: 'bold', color: COLORS.textDim }),
+        this.add.text(x + 18 + 0, y + 42, m.kind.toUpperCase(), {
+          fontFamily: FONT_BODY,
+          fontSize: '11px',
+          fontStyle: 'bold',
+          color: hexColor(m.color),
+        }),
       );
+      c.add(
+        this.add.text(x + 18, y + 62, lvl ? `Now: ${moduleText(m, lvl)}` : 'Not built', {
+          fontFamily: FONT_BODY,
+          fontSize: '14px',
+          fontStyle: 'bold',
+          color: lvl ? '#ffffff' : COLORS.textDim,
+          wordWrap: { width: 260 },
+        }),
+      );
+      if (!maxed) {
+        c.add(
+          this.add.text(x + 18, y + 102, `Next: ${moduleText(m, lvl + 1)}`, {
+            fontFamily: FONT_BODY,
+            fontSize: '13px',
+            color: '#ffd166',
+            wordWrap: { width: 270 },
+          }),
+        );
+      }
       const cost = this.run.moduleCost(m.id);
-      const label = cost === null ? 'MAXED' : `${lvl ? 'Upgrade' : 'Build'}  ${cost}g`;
-      const next = cost === null ? '' : `Next: ${moduleText(m, lvl + 1)}`;
-      c.add(this.add.text(760, y - 4, next, { fontFamily: FONT_BODY, fontSize: '15px', color: '#ffd166' }).setOrigin(1, 0.5));
-      const b = button(this, 890, y + 2, 200, 54, label, m.color, () => {
+      const label = cost === null ? 'MAXED' : `${lvl ? 'Upgrade' : 'Build'} ${cost}g`;
+      const b = button(this, x + 370, y + 96, 140, 50, label, m.color, () => {
         if (!this.run.buyModule(m.id)) {
           toast(this, cost === null ? 'Already maxed' : 'Not enough gold');
           return;
@@ -789,7 +828,7 @@ export class ShopScene extends Phaser.Scene {
       b.setEnabled(cost !== null && this.run.gold >= cost);
       c.add(b);
     });
-    c.add(button(this, 640, 640, 220, 56, 'Close', 0x5c677d, () => this.closeMothership()));
+    c.add(button(this, 1105, 650, 200, 54, 'Close', 0x5c677d, () => this.closeMothership()));
   }
 
   private closeMothership() {

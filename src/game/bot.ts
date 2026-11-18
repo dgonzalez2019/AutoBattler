@@ -2,7 +2,7 @@ import { getDef } from '../data/creatures';
 import { ELEMENTS } from '../data/elements';
 import { CLASSES, type TraitId } from '../data/traits';
 import { Rng } from '../sim/rng';
-import { MODULES } from './mothership';
+import type { ModuleId } from './mothership';
 import { REROLL_COST, type Run } from './run';
 
 /**
@@ -13,6 +13,8 @@ import { REROLL_COST, type Run } from './run';
  */
 export interface BotMemory {
   focus?: TraitId;
+  /** Playtest switch: never buy Mothership upgrades. */
+  noMothership?: boolean;
 }
 
 const fits = (defId: string, focus?: TraitId) => {
@@ -42,15 +44,9 @@ export function botTurn(run: Run, rng: Rng, mem: BotMemory, skill = 1) {
     mem.focus = top && smart() ? top : rng.pick<TraitId>([...ELEMENTS, ...CLASSES]);
   }
 
-  // Mid-game Mothership upgrade when gold is spare.
-  if (run.round >= 4 && run.gold >= 9 && smart()) {
-    const m = rng.pick(MODULES.filter((x) => x.id !== 'reactor'));
-    run.buyModule(m.id);
-  }
-
   // Economy: from round 3 a good player banks gold for interest, and only dips
   // into the reserve for strong buys (merges, on-plan creatures).
-  const reserve = run.round >= 3 && smart() ? 10 : 0;
+  const reserve = run.round >= 3 && run.team.every(Boolean) && smart() ? 10 : 0;
   const STRONG = 9;
 
   for (let guard = 0; guard < 30; guard++) {
@@ -81,6 +77,25 @@ export function botTurn(run: Run, rng: Rng, mem: BotMemory, skill = 1) {
       continue;
     }
     break;
+  }
+
+  // Mothership: economy and Scanner early, combat modules later; one upgrade a turn,
+  // after the army is bought (filling all 5 slots comes first).
+  if (!mem.noMothership && run.round >= 2 && (run.team.every(Boolean) || run.round <= 4) && smart()) {
+    const prefs: ModuleId[] =
+      run.round <= 4
+        ? ['reactor', 'scanner']
+        : rng.next() < 0.5
+          ? ['orbital', 'armory', 'shields', 'barracks', 'medbay', 'scanner', 'reactor']
+          : ['armory', 'shields', 'barracks', 'orbital', 'medbay', 'reactor', 'scanner'];
+    const keep = run.round >= 3 ? 6 : 3;
+    for (const id of prefs) {
+      const cost = run.moduleCost(id);
+      if (cost !== null && run.gold - cost >= keep) {
+        run.buyModule(id);
+        break;
+      }
+    }
   }
 
   // Tanky melee in front, ranged at the back.
