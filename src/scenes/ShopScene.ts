@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { abilityText, getDef } from '../data/creatures';
 import { ELEMENT_INFO, ELEMENTS } from '../data/elements';
-import { generateOpponent } from '../game/ai';
-import { REROLL_COST, Run, UNIT_COST, WINS_TO_VICTORY } from '../game/run';
-import { MAX_TEAM } from '../sim/battle';
+import { squadCount } from '../game/army';
+import { opponents } from '../game/matchmaking';
+import { MODULES, moduleText } from '../game/mothership';
+import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, UNIT_COST, WINS_TO_VICTORY } from '../game/run';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
 import { button, drawBackground, panel, toast, type Button } from '../ui/widgets';
@@ -26,6 +27,8 @@ export class ShopScene extends Phaser.Scene {
   private hud!: Record<'gold' | 'lives' | 'wins' | 'round', Phaser.GameObjects.Text>;
   private info!: Phaser.GameObjects.Container;
   private btn!: Record<'reroll' | 'freeze' | 'sell' | 'end', Button>;
+  private ship: Phaser.GameObjects.Container | null = null;
+  private busy = false;
 
   constructor() {
     super('Shop');
@@ -34,6 +37,8 @@ export class ShopScene extends Phaser.Scene {
   create() {
     this.run = this.registry.get('run');
     this.selected = null;
+    this.ship = null;
+    this.busy = false;
     drawBackground(this, this.run.round);
 
     // HUD
@@ -57,8 +62,9 @@ export class ShopScene extends Phaser.Scene {
       reroll: button(this, 180, 672, 200, 60, `Reroll  ${REROLL_COST}g`, 0x3a86ff, () => this.onReroll()),
       freeze: button(this, 400, 672, 200, 60, 'Freeze', 0x4cc9f0, () => this.onFreeze()),
       sell: button(this, 620, 672, 200, 60, 'Sell', 0xef476f, () => this.onSell()),
-      end: button(this, INFO_X, 672, 280, 64, 'BATTLE!', 0x06d6a0, () => this.onEndTurn()),
+      end: button(this, INFO_X, 672, 280, 64, 'BATTLE!', 0x06d6a0, () => void this.onEndTurn()),
     };
+    button(this, INFO_X, 48, 280, 54, 'MOTHERSHIP', 0x7b2cbf, () => this.openMothership());
 
     this.dyn = this.add.container(0, 0);
     this.input.dragDistanceThreshold = 10;
@@ -110,7 +116,10 @@ export class ShopScene extends Phaser.Scene {
       zone.on('pointerup', () => this.onTapTeam(i));
       this.dyn.add(zone);
       const unit = run.team[i];
-      if (unit) this.dyn.add(this.makeView(x, TEAM_Y, unit, { kind: 'team', index: i }));
+      if (unit) {
+        this.dyn.add(this.makeView(x, TEAM_Y, unit, { kind: 'team', index: i }));
+        this.dyn.add(this.countPill(x, TEAM_Y, unit.defId, unit.level));
+      }
     }
 
     // Shop slots
@@ -130,10 +139,11 @@ export class ShopScene extends Phaser.Scene {
         .text(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, String(UNIT_COST), { fontFamily: FONT_DISPLAY, fontSize: '18px', color: '#3a2a00' })
         .setOrigin(0.5);
       this.dyn.add([tag, price]);
+      this.dyn.add(this.countPill(x, SHOP_Y, slot.unit.defId, slot.unit.level));
       if (slot.frozen) {
         const f = this.add
-          .text(x + SLOT_W / 2 - 10, SHOP_Y - SLOT_H / 2 + 16, 'FROZEN', { fontFamily: FONT_BODY, fontSize: '13px', fontStyle: 'bold', color: '#e0fbfc' })
-          .setOrigin(1, 0.5);
+          .text(x, SHOP_Y + SLOT_H / 2 + 12, 'FROZEN', { fontFamily: FONT_BODY, fontSize: '14px', fontStyle: 'bold', color: '#e0fbfc' })
+          .setOrigin(0.5);
         this.dyn.add(f);
       }
     }
@@ -147,6 +157,20 @@ export class ShopScene extends Phaser.Scene {
     this.btn.sell.setLabel(sel?.kind === 'team' ? `Sell  +${run.team[sel.index]?.level ?? 1}g` : 'Sell');
 
     this.renderInfo();
+  }
+
+  /** "x6" pill in the slot corner: how many creatures this squad fields. */
+  private countPill(x: number, y: number, defId: string, level: number) {
+    const n = squadCount(defId, level, this.run.modules.barracks);
+    return this.add
+      .text(x + SLOT_W / 2 - 8, y - SLOT_H / 2 + 8, `x${n}`, {
+        fontFamily: FONT_DISPLAY,
+        fontSize: '18px',
+        color: '#ffffff',
+        backgroundColor: '#3a0ca3',
+        padding: { x: 6, y: 2 },
+      })
+      .setOrigin(1, 0);
   }
 
   private slotGraphic(x: number, y: number, selected: boolean, target: boolean, frozen = false) {
@@ -195,7 +219,7 @@ export class ShopScene extends Phaser.Scene {
       this.info.add([
         this.add.text(0, 0, 'HOW TO PLAY', { fontFamily: FONT_DISPLAY, fontSize: '24px', color: '#ffffff' }).setOrigin(0.5, 0),
         this.add
-          .text(0, 44, 'Tap or drag a creature from the shop onto your team. Drop a duplicate onto its twin to level it up.\n\nYour front creature fights first.', style(16, COLORS.textDim))
+          .text(0, 44, 'Buy squads from the shop and drag them onto your army. Drop a duplicate onto its twin to level it up and grow the squad.\n\nFront squads charge in first.', style(16, COLORS.textDim))
           .setOrigin(0.5, 0)
           .setLineSpacing(4),
         this.add.text(0, 230, 'TYPE WHEEL', { fontFamily: FONT_DISPLAY, fontSize: '18px', color: '#ffffff' }).setOrigin(0.5, 0),
@@ -222,8 +246,11 @@ export class ShopScene extends Phaser.Scene {
     this.info.add([
       this.add.text(0, 0, def.name.toUpperCase(), { fontFamily: FONT_DISPLAY, fontSize: '28px', color: hex }).setOrigin(0.5, 0),
       this.add.text(0, 40, `${el.name}  ·  Tier ${def.tier}  ·  Level ${unit.level}`, style(16, COLORS.textDim, true)).setOrigin(0.5, 0),
-      this.add.text(0, 76, `${unit.atk} ATTACK   ${unit.hp} HEALTH`, style(18, '#ffffff', true)).setOrigin(0.5, 0),
-      this.add.text(0, 120, abilityText(def, unit.level) || 'No ability.', style(18)).setOrigin(0.5, 0).setLineSpacing(4),
+      this.add.text(0, 70, `${unit.atk} ATTACK   ${unit.hp} HEALTH`, style(18, '#ffffff', true)).setOrigin(0.5, 0),
+      this.add
+        .text(0, 96, `Squad of ${squadCount(def.id, unit.level, this.run.modules.barracks)}  ·  ${def.ranged ? 'Ranged' : 'Melee'}`, style(16, '#e0aaff', true))
+        .setOrigin(0.5, 0),
+      this.add.text(0, 130, abilityText(def, unit.level) || 'No ability.', style(18)).setOrigin(0.5, 0).setLineSpacing(4),
       this.add.text(0, 220, `"${def.look}"`, { ...style(14, COLORS.textDim), fontStyle: 'italic' }).setOrigin(0.5, 0),
     ]);
     if (sel?.kind === 'shop') {
@@ -310,16 +337,85 @@ export class ShopScene extends Phaser.Scene {
     this.refresh();
   }
 
-  private onEndTurn() {
+  private async onEndTurn() {
+    if (this.busy) return;
     if (!this.run.team.some(Boolean)) {
-      toast(this, 'Add a creature to your team first');
+      toast(this, 'Add a squad to your army first');
       return;
     }
-    const player = this.run.endTurn();
-    const enemy = generateOpponent(this.run.round, this.run.battleSeed());
+    this.busy = true;
+    this.run.endTurn();
+    const player = this.run.snapshot('You');
+    // Matchmaking: fight an army saved by someone else at this same round.
+    const enemy = await opponents.findOpponent(this.run.round, this.run.battleSeed());
+    void opponents.submit({ ...player, name: 'Past You' });
     this.cameras.main.fadeOut(250, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('Battle', { player, enemy, seed: this.run.battleSeed() });
     });
+  }
+
+  // ── Mothership ───────────────────────────────────────────
+
+  private openMothership() {
+    this.ship?.destroy();
+    const c = this.add.container(0, 0).setDepth(200);
+    this.ship = c;
+    const shade = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.7).setInteractive();
+    shade.on('pointerup', () => this.closeMothership());
+    const bg = panel(this, 640, 375, 820, 560, 0.98);
+    const block = this.add.zone(640, 375, 820, 560).setInteractive(); // swallow taps on the panel
+    c.add([shade, bg, block]);
+    c.add(
+      this.add.text(640, 130, 'MOTHERSHIP', { fontFamily: FONT_DISPLAY, fontSize: '38px', color: '#e0aaff' }).setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(640, 172, `Upgrades last for the whole run  ·  ${this.run.gold} gold`, {
+          fontFamily: FONT_BODY,
+          fontSize: '18px',
+          fontStyle: 'bold',
+          color: COLORS.textDim,
+        })
+        .setOrigin(0.5),
+    );
+
+    MODULES.forEach((m, i) => {
+      const y = 240 + i * 100;
+      const lvl = this.run.modules[m.id];
+      const g = this.add.graphics();
+      g.fillStyle(COLORS.panelLight, 0.6).fillRoundedRect(260, y - 40, 760, 84, 16);
+      g.fillStyle(m.color).fillCircle(306, y + 2, 22);
+      g.lineStyle(3, 0xffffff, 0.8).strokeCircle(306, y + 2, 22);
+      for (let p = 0; p < m.maxLevel; p++) {
+        g.fillStyle(p < lvl ? m.color : 0x000000, p < lvl ? 1 : 0.45).fillRoundedRect(350 + p * 30, y + 16, 24, 9, 4);
+      }
+      c.add(g);
+      c.add(this.add.text(350, y - 26, m.name, { fontFamily: FONT_DISPLAY, fontSize: '24px', color: '#ffffff' }));
+      const now = lvl > 0 ? moduleText(m, lvl) : 'Not built';
+      c.add(
+        this.add.text(480, y + 10, now, { fontFamily: FONT_BODY, fontSize: '17px', fontStyle: 'bold', color: COLORS.textDim }),
+      );
+      const cost = this.run.moduleCost(m.id);
+      const label = cost === null ? 'MAXED' : `${lvl ? 'Upgrade' : 'Build'}  ${cost}g`;
+      const next = cost === null ? '' : `Next: ${moduleText(m, lvl + 1)}`;
+      c.add(this.add.text(760, y - 4, next, { fontFamily: FONT_BODY, fontSize: '15px', color: '#ffd166' }).setOrigin(1, 0.5));
+      const b = button(this, 890, y + 2, 200, 54, label, m.color, () => {
+        if (!this.run.buyModule(m.id)) {
+          toast(this, cost === null ? 'Already maxed' : 'Not enough gold');
+          return;
+        }
+        this.refresh();
+        this.openMothership();
+      });
+      b.setEnabled(cost !== null && this.run.gold >= cost);
+      c.add(b);
+    });
+    c.add(button(this, 640, 640, 220, 56, 'Close', 0x5c677d, () => this.closeMothership()));
+  }
+
+  private closeMothership() {
+    this.ship?.destroy();
+    this.ship = null;
   }
 }

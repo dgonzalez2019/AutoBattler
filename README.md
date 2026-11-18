@@ -13,19 +13,27 @@ npm run build    # production build into dist/
 
 ## How it plays
 
-- **Shop:** you get 10 gold every turn. Creatures cost 3, a reroll costs 1, and selling one refunds its level in gold. You can freeze a shop slot to keep it after a reroll and into the next round.
-- **Merging:** drop a duplicate creature onto its twin. Each merge gives +1/+1. Merging 3 copies reaches level 2, and 6 copies reaches level 3. A creature's ability numbers multiply by its level.
-- **Battle:** the two front creatures hit each other at the same time. Abilities fire on triggers: start of battle, before attack, hurt and faint.
-- **Types:** Plasma beats Mech, Mech beats Cryo, Cryo beats Bio, Bio beats Void, and Void beats Plasma. A super effective hit does x1.5 damage; a resisted hit does x0.75.
-- **Unlocks:** a higher creature tier unlocks every 2 rounds, and the shop grows to 4 slots from round 5.
+- **Squads:** each shop purchase is a squad of creatures. Tier 1 squads field 6 units and tier 4 squads field 2. Your army has 5 squad slots, and the front slot deploys closest to the enemy.
+- **Shop:** you get 10 gold every turn. A squad costs 3, a reroll costs 1, and selling a squad refunds its level in gold. You can freeze a shop slot to keep it for later.
+- **Merging:** drop a duplicate squad onto its twin. Each merge gives +1/+1 per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. A squad's ability numbers multiply by its level.
+- **Battle:** both armies charge across a real-time battlefield. Melee units close in, and ranged units fire from range. Abilities trigger per unit at start of battle, on attack, when hurt and on faint.
+- **Mothership:** your home base, upgraded with shop gold. Upgrades last the whole run.
+  - Barracks: bigger squads.
+  - Armory: more attack.
+  - Shield Bay: more health.
+  - Reactor: more gold each turn.
+- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army saved at round N, and every army you send into battle is saved to the pool. You have 5 lives and win the run at 10 wins.
+  - The pool currently lives in your own browser and is mixed with AI-built armies (`src/game/matchmaking.ts`).
+  - Online PvP means implementing `OpponentSource` against a backend.
+- **Types:** Plasma beats Mech, Mech beats Cryo, Cryo beats Bio, Bio beats Void, and Void beats Plasma. A super effective attack does x1.5 damage; a resisted one does x0.75.
 
 ## Project layout
 
 | Path | What it holds |
 |---|---|
 | `src/data/` | Creature roster (`creatures.ts`) and the type wheel (`elements.ts`). Balance changes go here. |
-| `src/sim/` | Deterministic battle simulator. Same teams and seed always give the same battle. It has no rendering code, so it can also run on a server for PvP later. |
-| `src/game/` | Run state (shop, gold, lives, merging) and AI opponents. |
+| `src/sim/` | Deterministic real-time battlefield simulator (`field.ts`). It uses a fixed 20 Hz tick and resolves all hits in a tick together. Same armies and seed always give the same battle. It has no rendering code, so it can also run on a server to validate PvP results. |
+| `src/game/` | Run state (shop, gold, lives, merging), army snapshots, the Mothership, matchmaking and AI armies. |
 | `src/scenes/` | Phaser screens: Title, Shop, Battle and GameOver. |
 | `src/ui/` | Shared widgets and the `CreatureView` sprite with its stat badges. |
 | `src/art/` | Art loader. |

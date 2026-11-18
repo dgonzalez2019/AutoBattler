@@ -1,227 +1,337 @@
 import Phaser from 'phaser';
-import { getDef } from '../data/creatures';
+import { ART_SIZE, creatureKey } from '../art/creatureArt';
 import { ELEMENT_INFO } from '../data/elements';
+import type { ArmySnapshot } from '../game/army';
 import type { Run } from '../game/run';
-import { simulateBattle, type BattleEvent, type BattleLog, type BattleUnit, type UnitSpec } from '../sim/battle';
-import { CreatureView } from '../ui/CreatureView';
+import { DT, FIELD_H, FIELD_W, FieldBattle, type BattleResult, type FieldEvent, type FieldUnit } from '../sim/field';
 import { COLORS, FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
-import { button, drawBackground, floatText, tween, wait } from '../ui/widgets';
+import { button, drawBackground, floatText, type Button } from '../ui/widgets';
 
 interface BattleInit {
-  player: UnitSpec[];
-  enemy: UnitSpec[];
+  player: ArmySnapshot;
+  enemy: ArmySnapshot;
   seed: number;
 }
 
-const ROW_Y = 400;
-const GAP = 124;
+const OX = (W - FIELD_W) / 2;
+const OY = 205;
 const SPEEDS = [1, 2, 4];
+const SIDE_COLOR = [0x4cc9f0, 0xef476f];
 
-/** Replays a precomputed battle log as animation. All game logic lives in the sim. */
+interface UnitSprite {
+  img: Phaser.GameObjects.Image;
+  baseScale: number;
+  lunge: number;
+  lungeX: number;
+  lungeY: number;
+}
+
+/** Renders a FieldBattle in real time. All rules live in the simulator. */
 export class BattleScene extends Phaser.Scene {
-  private views = new Map<number, CreatureView>();
-  private order: [number[], number[]] = [[], []];
-  private sideOf = new Map<number, 0 | 1>();
-  private log!: BattleLog;
+  private battle!: FieldBattle;
+  private sprites = new Map<number, UnitSprite>();
+  private shots = new Map<number, Phaser.GameObjects.Arc>();
+  private overlay!: Phaser.GameObjects.Graphics;
+  private counts!: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
+  private bars!: Phaser.GameObjects.Graphics;
+  private startCounts: [number, number] = [1, 1];
+  private acc = 0;
   private speedIdx = 0;
+  private skipping = false;
+  private running = false;
+  private finished = false;
+  private speedBtn!: Button;
 
   constructor() {
     super('Battle');
   }
 
   create(data: BattleInit) {
-    this.views.clear();
-    this.sideOf.clear();
-    this.order = [[], []];
+    this.sprites.clear();
+    this.shots.clear();
+    this.acc = 0;
+    this.skipping = false;
+    this.running = false;
+    this.finished = false;
     this.speedIdx = Number(this.registry.get('battleSpeed') ?? 0);
-    this.applySpeed();
 
     const run: Run = this.registry.get('run');
     drawBackground(this, run.round * 7 + 3);
     this.cameras.main.fadeIn(250);
+    this.drawArena();
 
-    // Arena floor
-    const floor = this.add.graphics();
-    floor.fillStyle(0x000000, 0.25).fillEllipse(W / 2, ROW_Y + 80, 1250, 120);
-    floor.lineStyle(2, COLORS.highlight, 0.25).strokeEllipse(W / 2, ROW_Y + 80, 1250, 120);
+    this.battle = new FieldBattle([data.player, data.enemy], data.seed);
+    this.startCounts = [Math.max(1, this.battle.aliveCount(0)), Math.max(1, this.battle.aliveCount(1))];
+    for (const u of this.battle.units) this.addSprite(u, false);
 
-    this.add.text(40, 40, 'YOU', { fontFamily: FONT_DISPLAY, fontSize: '28px', color: '#4cc9f0' }).setOrigin(0, 0.5);
-    this.add.text(W - 40, 40, 'OPPONENT', { fontFamily: FONT_DISPLAY, fontSize: '28px', color: '#ef476f' }).setOrigin(1, 0.5);
-    this.add
-      .text(W / 2, 40, `ROUND ${run.round}`, { fontFamily: FONT_DISPLAY, fontSize: '28px', color: '#ffffff' })
-      .setOrigin(0.5);
+    this.overlay = this.add.graphics().setDepth(900);
+    this.drawHeader(data, run.round);
 
-    const speedBtn = button(this, W - 210, H - 50, 120, 54, `x${SPEEDS[this.speedIdx]}`, 0x3a86ff, () => {
+    this.speedBtn = button(this, W - 210, H - 42, 120, 52, `x${SPEEDS[this.speedIdx]}`, 0x3a86ff, () => {
       this.speedIdx = (this.speedIdx + 1) % SPEEDS.length;
       this.registry.set('battleSpeed', this.speedIdx);
-      speedBtn.setLabel(`x${SPEEDS[this.speedIdx]}`);
-      this.applySpeed();
+      this.speedBtn.setLabel(`x${SPEEDS[this.speedIdx]}`);
     });
-    button(this, W - 80, H - 50, 120, 54, 'Skip', 0x5c677d, () => {
-      this.tweens.timeScale = 30;
-      this.time.timeScale = 30;
-    });
+    this.speedBtn.setDepth(950);
+    button(this, W - 80, H - 42, 120, 52, 'Skip', 0x5c677d, () => (this.skipping = true)).setDepth(950);
 
-    this.log = simulateBattle(data.player, data.enemy, data.seed);
-    for (const side of [0, 1] as const) {
-      this.log.initial[side].forEach((u, i) => this.spawn(u, i, false));
-    }
-    void this.play();
+    this.intro(data);
   }
 
-  private applySpeed() {
-    this.tweens.timeScale = SPEEDS[this.speedIdx];
-    this.time.timeScale = SPEEDS[this.speedIdx];
+  // ── Setup ───────────────────────────────────────────────
+
+  private drawArena() {
+    const g = this.add.graphics().setDepth(-10);
+    g.fillStyle(0x000000, 0.28).fillRoundedRect(OX - 10, OY - 20, FIELD_W + 20, FIELD_H + 40, 40);
+    g.lineStyle(2, COLORS.highlight, 0.2).strokeRoundedRect(OX - 10, OY - 20, FIELD_W + 20, FIELD_H + 40, 40);
+    g.lineStyle(1, COLORS.highlight, 0.07);
+    for (let x = 0; x <= FIELD_W; x += 60) g.lineBetween(OX + x, OY - 10, OX + x, OY + FIELD_H + 10);
+    for (let y = 0; y <= FIELD_H; y += 50) g.lineBetween(OX, OY + y, OX + FIELD_W, OY + y);
+    g.lineStyle(3, 0xffffff, 0.08).lineBetween(OX + FIELD_W / 2, OY - 10, OX + FIELD_W / 2, OY + FIELD_H + 10);
   }
 
-  private slotX(side: 0 | 1, index: number) {
-    return side === 0 ? W / 2 - 82 - index * GAP : W / 2 + 82 + index * GAP;
+  private drawHeader(data: BattleInit, round: number) {
+    const name = (x: number, text: string, color: string, originX: number) =>
+      this.add.text(x, 36, text, { fontFamily: FONT_DISPLAY, fontSize: '24px', color }).setOrigin(originX, 0.5).setDepth(950);
+    name(40, data.player.name.toUpperCase(), '#4cc9f0', 0);
+    name(W - 40, data.enemy.name.toUpperCase(), '#ef476f', 1);
+    this.add
+      .text(W / 2, 36, `ROUND ${round}`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffffff' })
+      .setOrigin(0.5)
+      .setDepth(950);
+    const countStyle = { fontFamily: FONT_BODY, fontSize: '18px', fontStyle: 'bold', color: '#e8ecff' };
+    this.counts = [
+      this.add.text(40, 100, '', countStyle).setOrigin(0, 0.5).setDepth(950),
+      this.add.text(W - 40, 100, '', countStyle).setOrigin(1, 0.5).setDepth(950),
+    ];
+    this.bars = this.add.graphics().setDepth(950);
   }
 
-  private spawn(u: BattleUnit, index: number, animate: boolean) {
-    const v = new CreatureView(this, this.slotX(u.side, index), ROW_Y, u, 140, u.side === 1);
-    this.views.set(u.uid, v);
-    this.sideOf.set(u.uid, u.side);
-    this.order[u.side].splice(index, 0, u.uid);
-    if (animate) {
-      v.setScale(0);
-      this.tweens.add({ targets: v, scale: 1, duration: 300, ease: 'Back.easeOut' });
-    }
-  }
-
-  private relayout(): Promise<void> {
-    const moves: Promise<void>[] = [];
-    for (const side of [0, 1] as const) {
-      this.order[side].forEach((uid, i) => {
-        const v = this.views.get(uid)!;
-        const x = this.slotX(side, i);
-        if (v.x !== x) moves.push(tween(this, { targets: v, x, duration: 260, ease: 'Cubic.easeOut' }));
+  private intro(data: BattleInit) {
+    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setDepth(980);
+    const vs = this.add
+      .text(W / 2, H / 2, 'VS', { fontFamily: FONT_DISPLAY, fontSize: '110px', color: '#ffd166', stroke: '#000000', strokeThickness: 10 })
+      .setOrigin(0.5)
+      .setDepth(981)
+      .setScale(0.2);
+    const left = this.add
+      .text(-400, H / 2 - 110, data.player.name, { fontFamily: FONT_DISPLAY, fontSize: '40px', color: '#4cc9f0', stroke: '#000000', strokeThickness: 6 })
+      .setOrigin(0.5)
+      .setDepth(981);
+    const right = this.add
+      .text(W + 400, H / 2 + 110, data.enemy.name, { fontFamily: FONT_DISPLAY, fontSize: '40px', color: '#ef476f', stroke: '#000000', strokeThickness: 6 })
+      .setOrigin(0.5)
+      .setDepth(981);
+    this.tweens.add({ targets: vs, scale: 1, duration: 350, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: left, x: W / 2, duration: 400, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: right, x: W / 2, duration: 400, ease: 'Cubic.easeOut' });
+    this.time.delayedCall(1300, () => {
+      this.tweens.add({
+        targets: [shade, vs, left, right],
+        alpha: 0,
+        duration: 250,
+        onComplete: () => {
+          [shade, vs, left, right].forEach((o) => o.destroy());
+          this.running = true;
+          this.drainEvents(); // start-of-battle abilities
+        },
       });
+    });
+  }
+
+  private addSprite(u: FieldUnit, pop: boolean) {
+    const size = u.radius * 3.6;
+    const baseScale = size / ART_SIZE;
+    const img = this.add.image(OX + u.x, OY + u.y, creatureKey(u.defId)).setScale(baseScale).setFlipX(u.side === 1);
+    this.sprites.set(u.id, { img, baseScale, lunge: 0, lungeX: 0, lungeY: 0 });
+    if (pop) {
+      img.setScale(0);
+      this.tweens.add({ targets: img, scale: baseScale, duration: 250, ease: 'Back.easeOut' });
     }
-    return Promise.all(moves).then(() => undefined);
   }
 
-  private async play() {
-    await wait(this, 500);
-    for (const e of this.log.events) await this.animate(e);
+  // ── Loop ────────────────────────────────────────────────
+
+  update(_time: number, delta: number) {
+    if (this.running && !this.finished) {
+      const speed = this.skipping ? 60 : SPEEDS[this.speedIdx];
+      this.acc += (Math.min(delta, 100) / 1000) * speed;
+      let steps = 0;
+      while (this.acc >= DT && steps++ < 600) {
+        this.battle.step();
+        this.drainEvents();
+        this.acc -= DT;
+        if (this.battle.result) break;
+      }
+      if (this.battle.result) {
+        this.finished = true;
+        this.time.delayedCall(this.skipping ? 100 : 700, () => this.showResult(this.battle.result!));
+      }
+    }
+    this.render();
   }
 
-  private async animate(e: BattleEvent) {
+  private render() {
+    const alpha = this.finished ? 1 : Math.min(1, this.acc / DT);
+    const g = this.overlay.clear();
+    for (const u of this.battle.units) {
+      const s = this.sprites.get(u.id);
+      if (!s || !u.alive) continue;
+      s.lunge = Math.max(0, s.lunge - 0.12);
+      const x = OX + Phaser.Math.Linear(u.px, u.x, alpha) + s.lungeX * s.lunge;
+      const y = OY + Phaser.Math.Linear(u.py, u.y, alpha) + s.lungeY * s.lunge;
+      s.img.setPosition(x, y).setDepth(y);
+      // Team ring + health bar
+      const r = u.radius;
+      g.lineStyle(2, SIDE_COLOR[u.side], 0.8).strokeEllipse(x, y + r * 1.2, r * 2.4, r * 0.8);
+      const w = r * 2.2;
+      const pct = Phaser.Math.Clamp(u.hp / u.maxHp, 0, 1);
+      g.fillStyle(0x000000, 0.6).fillRect(x - w / 2, y - r * 1.9, w, 4);
+      g.fillStyle(SIDE_COLOR[u.side], 1).fillRect(x - w / 2, y - r * 1.9, w * pct, 4);
+    }
+
+    // Projectiles
+    const live = new Set<number>();
+    for (const p of this.battle.projectiles) {
+      live.add(p.id);
+      let dot = this.shots.get(p.id);
+      if (!dot) {
+        const { accent } = ELEMENT_INFO[p.sourceElement];
+        dot = this.add.circle(0, 0, 5, accent).setStrokeStyle(2, 0xffffff, 0.8).setDepth(800);
+        this.shots.set(p.id, dot);
+      }
+      dot.setPosition(OX + p.x, OY + p.y);
+    }
+    for (const [id, dot] of this.shots) {
+      if (!live.has(id)) {
+        dot.destroy();
+        this.shots.delete(id);
+      }
+    }
+
+    // Army size bars
+    const b = this.bars.clear();
+    for (const side of [0, 1] as const) {
+      const n = this.battle.aliveCount(side);
+      this.counts[side].setText(`${n} units`);
+      const pct = n / this.startCounts[side];
+      const x = side === 0 ? 40 : W - 40 - 300;
+      b.fillStyle(0x000000, 0.5).fillRoundedRect(x, 64, 300, 14, 7);
+      if (pct > 0) {
+        const wBar = Math.max(14, 300 * Math.min(1, pct));
+        b.fillStyle(SIDE_COLOR[side]).fillRoundedRect(side === 0 ? x : x + 300 - wBar, 64, wBar, 14, 7);
+      }
+    }
+  }
+
+  private drainEvents() {
+    const events = this.battle.events;
+    this.battle.events = [];
+    if (this.skipping) {
+      // Only keep the bookkeeping events when fast-forwarding.
+      for (const e of events) if (e.t === 'death' || e.t === 'spawn') this.handle(e);
+      return;
+    }
+    for (const e of events) this.handle(e);
+  }
+
+  private handle(e: FieldEvent) {
+    const u = 'id' in e ? this.battle.unit(e.id) : undefined;
+    const s = u ? this.sprites.get(u.id) : undefined;
     switch (e.t) {
-      case 'ability': {
-        const v = this.views.get(e.uid);
-        if (!v) return;
-        const def = getDef(v.data_.defId);
-        v.pulse(ELEMENT_INFO[def.element].color);
-        await wait(this, 280);
+      case 'spawn':
+        if (u) this.addSprite(u, true);
         return;
-      }
       case 'attack': {
-        const a = this.views.get(e.a)!;
-        const b = this.views.get(e.b)!;
-        const ax = a.x;
-        const bx = b.x;
-        await Promise.all([
-          tween(this, { targets: a, x: ax + 55, duration: 150, ease: 'Quad.easeIn' }),
-          tween(this, { targets: b, x: bx - 55, duration: 150, ease: 'Quad.easeIn' }),
-        ]);
-        this.cameras.main.shake(120, 0.006);
-        this.impact((ax + bx) / 2, ROW_Y - 10);
-        // Damage events right after this show the hit; return to place in parallel.
-        this.tweens.add({ targets: a, x: ax, duration: 220, delay: 80, ease: 'Quad.easeOut' });
-        this.tweens.add({ targets: b, x: bx, duration: 220, delay: 80, ease: 'Quad.easeOut' });
+        const t = this.battle.unit(e.targetId);
+        if (!u || !s || !t || u.ranged) return;
+        const d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
+        s.lungeX = ((t.x - u.x) / d) * 10;
+        s.lungeY = ((t.y - u.y) / d) * 10;
+        s.lunge = 1;
         return;
       }
-      case 'damage': {
-        const v = this.views.get(e.uid);
-        if (!v) return;
-        v.update_({ hp: e.hp });
-        v.art.setTintFill(0xffffff);
-        this.time.delayedCall(90, () => v.art.clearTint());
-        this.tweens.add({ targets: v.art, angle: { from: -6, to: 0 }, duration: 200 });
-        floatText(this, v.x, v.y - 70, `-${e.amount}`, '#ff5d73', 34);
-        if (e.eff === 'super') floatText(this, v.x, v.y - 110, 'SUPER EFFECTIVE', '#ffd166', 18);
-        if (e.eff === 'weak') floatText(this, v.x, v.y - 110, 'resisted', '#9aa3c7', 18);
-        await wait(this, 260);
+      case 'hit': {
+        if (!s) return;
+        s.img.setTintFill(0xffffff);
+        this.time.delayedCall(70, () => s.img.active && s.img.clearTint());
+        if (e.ability || e.eff === 'super') {
+          floatText(this, s.img.x, s.img.y - 26, `-${e.dmg}`, e.eff === 'super' ? '#ffd166' : '#ff5d73', 18);
+        }
         return;
       }
-      case 'stats': {
-        const v = this.views.get(e.uid);
-        if (!v) return;
-        v.update_({ atk: e.atk, hp: e.hp });
-        const parts = [];
-        if (e.dAtk) parts.push(`${e.dAtk > 0 ? '+' : ''}${e.dAtk} atk`);
-        if (e.dHp) parts.push(`${e.dHp > 0 ? '+' : ''}${e.dHp} hp`);
-        floatText(this, v.x, v.y - 70, parts.join(' '), e.dAtk < 0 || e.dHp < 0 ? '#ff5d73' : '#06d6a0', 24);
-        await wait(this, 300);
-        return;
-      }
-      case 'faint': {
-        const v = this.views.get(e.uid);
-        if (!v) return;
-        const side = this.sideOf.get(e.uid)!;
-        this.order[side] = this.order[side].filter((u) => u !== e.uid);
-        await tween(this, {
-          targets: v,
+      case 'death': {
+        if (!u || !s) return;
+        this.burst(s.img.x, s.img.y, ELEMENT_INFO[u.element].color);
+        const img = s.img;
+        this.sprites.delete(u.id);
+        if (this.skipping) {
+          img.destroy();
+          return;
+        }
+        this.tweens.add({
+          targets: img,
           alpha: 0,
-          y: v.y + 30,
-          angle: side === 0 ? -25 : 25,
-          scale: 0.6,
-          duration: 300,
+          scale: s.baseScale * 0.4,
+          angle: u.side === 0 ? -40 : 40,
+          duration: 260,
+          onComplete: () => img.destroy(),
         });
-        v.destroy();
-        this.views.delete(e.uid);
-        await this.relayout();
         return;
       }
-      case 'summon': {
-        this.spawn(e.unit, e.index, true);
-        await this.relayout();
-        await wait(this, 200);
+      case 'ability': {
+        if (!u || !s) return;
+        const ring = this.add
+          .circle(s.img.x, s.img.y, u.radius, 0, 0)
+          .setStrokeStyle(3, ELEMENT_INFO[u.element].accent, 0.9)
+          .setDepth(850);
+        this.tweens.add({ targets: ring, scale: 2.4, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
         return;
       }
-      case 'end':
-        await wait(this, 400);
-        this.showResult(e.result);
+      case 'buff':
+        if (s && (e.dAtk > 0 || e.dHp > 0)) {
+          this.tweens.add({ targets: s.img, scale: s.baseScale * 1.25, duration: 90, yoyo: true });
+        }
         return;
     }
   }
 
-  private impact(x: number, y: number) {
-    for (let i = 0; i < 10; i++) {
-      const p = this.add.circle(x, y, Phaser.Math.Between(3, 7), Phaser.Utils.Array.GetRandom([0xffffff, 0xffd166, 0xff8c42]));
+  private burst(x: number, y: number, color: number) {
+    if (this.skipping) return;
+    for (let i = 0; i < 6; i++) {
+      const p = this.add.circle(x, y, Phaser.Math.Between(2, 5), i % 2 ? color : 0xffffff).setDepth(860);
       const a = Math.random() * Math.PI * 2;
-      const d = Phaser.Math.Between(30, 80);
+      const d = Phaser.Math.Between(14, 36);
       this.tweens.add({
         targets: p,
         x: x + Math.cos(a) * d,
         y: y + Math.sin(a) * d,
         alpha: 0,
-        duration: 350,
+        duration: 320,
         onComplete: () => p.destroy(),
       });
     }
   }
 
-  private showResult(result: BattleLog['result']) {
-    this.tweens.timeScale = 1;
-    this.time.timeScale = 1;
+  // ── Result ──────────────────────────────────────────────
+
+  private showResult(result: BattleResult) {
     const run: Run = this.registry.get('run');
     const label = { win: 'VICTORY', lose: 'DEFEAT', draw: 'DRAW' }[result];
     const color = { win: '#06d6a0', lose: '#ef476f', draw: '#ffd166' }[result];
 
-    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0).setDepth(80);
+    const shade = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0).setDepth(990);
     this.tweens.add({ targets: shade, fillAlpha: 0.55, duration: 300 });
     const title = this.add
       .text(W / 2, H / 2 - 30, label, { fontFamily: FONT_DISPLAY, fontSize: '96px', color, stroke: '#000000', strokeThickness: 10 })
       .setOrigin(0.5)
-      .setDepth(81)
+      .setDepth(991)
       .setScale(0.3);
     this.tweens.add({ targets: title, scale: 1, duration: 400, ease: 'Back.easeOut' });
     this.add
       .text(W / 2, H / 2 + 60, 'Tap to continue', { fontFamily: FONT_BODY, fontSize: '24px', fontStyle: 'bold', color: '#ffffff' })
       .setOrigin(0.5)
-      .setDepth(81);
+      .setDepth(991);
 
     this.time.delayedCall(500, () => {
       this.input.once('pointerdown', () => {

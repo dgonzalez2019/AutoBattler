@@ -58,3 +58,33 @@ describe('Run', () => {
     expect([0, 1, 2, 4, 5].map(levelForXp)).toEqual([1, 1, 2, 2, 3]);
   });
 });
+
+describe('Mothership', () => {
+  it('buys and maxes modules', () => {
+    const run = new Run(1);
+    run.gold = 100;
+    expect(run.buyModule('reactor')).toBe(true);
+    expect(run.buyModule('reactor')).toBe(true);
+    expect(run.buyModule('reactor')).toBe(false);
+    expect(run.modules.reactor).toBe(2);
+    expect(run.gold).toBe(100 - 5 - 8);
+  });
+
+  it('reactor adds gold each turn', () => {
+    const run = new Run(1);
+    run.modules.reactor = 1;
+    run.finishBattle('win');
+    expect(run.gold).toBe(START_GOLD + 1);
+  });
+
+  it('snapshot lists squads front first with modules', () => {
+    const run = new Run(1);
+    run.team[2] = { defId: 'drone', atk: 1, hp: 1, level: 1, xp: 0 };
+    run.team[0] = { defId: 'gearhound', atk: 3, hp: 3, level: 1, xp: 0 };
+    run.modules.armory = 1;
+    const snap = run.snapshot('me');
+    expect(snap.squads.map((s) => s.defId)).toEqual(['gearhound', 'drone']);
+    expect(snap.modules.armory).toBe(1);
+    expect(snap.round).toBe(1);
+  });
+});

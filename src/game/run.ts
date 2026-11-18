@@ -1,8 +1,12 @@
 import { getDef, scaled, SHOP_POOL, type Effect } from '../data/creatures';
-import { MAX_TEAM, type BattleResult, type UnitSpec } from '../sim/battle';
+import type { BattleResult } from '../sim/field';
 import { Rng, randomSeed } from '../sim/rng';
+import type { ArmySnapshot, SquadSpec } from './army';
+import { emptyModules, MODULES, moduleBonus, type ModuleId, type ModuleLevels } from './mothership';
 
-export interface TeamUnit extends UnitSpec {
+export const MAX_SQUADS = 5;
+
+export interface TeamUnit extends SquadSpec {
   /** Merge experience: level 2 at 2 xp, level 3 at 5 xp. */
   xp: number;
 }
@@ -37,7 +41,8 @@ export class Run {
   wins = 0;
   gold = START_GOLD;
   /** Index 0 is the front of the team. */
-  team: (TeamUnit | null)[] = Array(MAX_TEAM).fill(null);
+  team: (TeamUnit | null)[] = Array(MAX_SQUADS).fill(null);
+  modules: ModuleLevels = emptyModules();
   shop: (ShopSlot | null)[] = [];
   lastResult: BattleResult | null = null;
   private rng: Rng;
@@ -173,10 +178,39 @@ export class Run {
     }
   }
 
-  /** End the shop phase: fire end-turn abilities and return the battle lineup (front first). */
-  endTurn(): UnitSpec[] {
+  get turnGold(): number {
+    return START_GOLD + moduleBonus('reactor', this.modules.reactor);
+  }
+
+  moduleCost(id: ModuleId): number | null {
+    const def = MODULES.find((m) => m.id === id)!;
+    const lvl = this.modules[id];
+    return lvl >= def.maxLevel ? null : def.costs[lvl];
+  }
+
+  buyModule(id: ModuleId): boolean {
+    const cost = this.moduleCost(id);
+    if (cost === null || this.gold < cost) return false;
+    this.gold -= cost;
+    this.modules[id]++;
+    return true;
+  }
+
+  /** End the shop phase: fire end-turn abilities. */
+  endTurn() {
     for (const u of this.team) if (u) this.fireShopTrigger(u, 'endTurn');
-    return this.team.filter((u): u is TeamUnit => !!u).map(({ defId, atk, hp, level }) => ({ defId, atk, hp, level }));
+  }
+
+  /** The army as it stands now, front squad first. Used for battle and matchmaking. */
+  snapshot(name: string): ArmySnapshot {
+    return {
+      name,
+      round: this.round,
+      wins: this.wins,
+      lives: this.lives,
+      squads: this.team.filter((u): u is TeamUnit => !!u).map(({ defId, atk, hp, level }) => ({ defId, atk, hp, level })),
+      modules: { ...this.modules },
+    };
   }
 
   /** Apply the battle outcome and start the next shop turn. */
@@ -185,7 +219,7 @@ export class Run {
     if (result === 'win') this.wins++;
     if (result === 'lose') this.lives = Math.max(0, this.lives - (this.round <= 2 ? 1 : 2));
     this.round++;
-    this.gold = START_GOLD;
+    this.gold = this.turnGold;
     this.refillShop(false);
   }
 
