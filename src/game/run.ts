@@ -93,6 +93,11 @@ export class Run {
     this.refillShop(true);
   }
 
+  /** Whether this run's shop can roll the creature (i.e. the player has it unlocked). */
+  inPool(defId: string): boolean {
+    return this.pool.some((c) => c.id === defId);
+  }
+
   private get fx() {
     return this.commander.effects;
   }

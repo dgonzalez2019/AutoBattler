@@ -13,6 +13,7 @@ import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
 import { button, drawBackground, panel, toast, type Button } from '../ui/widgets';
 import { commanderBadge } from '../art/commanderArt';
+import { artScale, creatureKey } from '../art/creatureArt';
 
 type Selection = { kind: 'shop' | 'team'; index: number } | null;
 
@@ -40,6 +41,8 @@ export class ShopScene extends Phaser.Scene {
   private syn!: Phaser.GameObjects.Container;
   private trait: TraitId | null = null;
   private showCommander = false;
+  /** Creature previewed from a trait's sprite grid. */
+  private preview: string | null = null;
   private busy = false;
 
   constructor() {
@@ -278,6 +281,7 @@ export class ShopScene extends Phaser.Scene {
       const zone = this.add.zone(SYN_X + SYN_W / 2, y + 1, SYN_W - 20, 40).setInteractive({ useHandCursor: true });
       zone.on('pointerup', () => {
         this.trait = this.trait === t ? null : t;
+        this.preview = null;
         this.selected = null;
         this.refresh();
       });
@@ -347,7 +351,11 @@ export class ShopScene extends Phaser.Scene {
     this.infoBadge?.destroy();
     this.infoBadge = null;
     const sel = this.selected;
-    const unit = sel ? (sel.kind === 'shop' ? this.run.shop[sel.index]?.unit : this.run.team[sel.index]) : null;
+    let unit = sel ? (sel.kind === 'shop' ? this.run.shop[sel.index]?.unit : this.run.team[sel.index]) : null;
+    if (!unit && this.preview && this.trait) {
+      const d = CREATURES[this.preview];
+      unit = { defId: d.id, atk: d.atk, hp: d.hp, level: 1, xp: 0 };
+    }
     const style = (size: number, color = COLORS.text, bold = false, align: 'center' | 'left' = 'center') => ({
       fontFamily: FONT_BODY,
       fontSize: `${size}px`,
@@ -373,8 +381,10 @@ export class ShopScene extends Phaser.Scene {
       const team = this.run.team.filter((u): u is NonNullable<typeof u> => !!u);
       const st = computeTraits(team);
       add(this.add.text(0, 0, def.name.toUpperCase(), { fontFamily: FONT_DISPLAY, fontSize: '28px', color: hex(def.color) }).setOrigin(0.5, 0));
-      add(this.add.text(0, 38, `${def.kind === 'element' ? 'Element' : 'Class'} synergy  ·  ${def.blurb}`, style(14, COLORS.textDim, true)).setOrigin(0.5, 0));
-      let y = 76;
+      const blurb = add(
+        this.add.text(0, 38, `${def.kind === 'element' ? 'Element' : 'Class'} synergy  ·  ${def.blurb}`, style(13, COLORS.textDim, true)).setOrigin(0.5, 0),
+      );
+      let y = 38 + blurb.height + 12;
       def.tiers.forEach((line, k) => {
         const on = st.levels[this.trait!] > k;
         const t = add(
@@ -382,15 +392,41 @@ export class ShopScene extends Phaser.Scene {
         );
         y += t.height + 12;
       });
-      const members = Object.values(CREATURES).filter((c) => !c.token && (c.element === this.trait || c.class === this.trait));
-      add(this.add.text(0, y + 4, 'CREATURES', { fontFamily: FONT_DISPLAY, fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0));
+      // Every creature that shares this trait, as sprites: in your army (green), locked (dim).
+      const members = Object.values(CREATURES)
+        .filter((c) => !c.token && (c.element === this.trait || c.class === this.trait))
+        .sort((a, b) => a.rarity - b.rarity || a.name.localeCompare(b.name));
+      const owned = new Set(team.map((u) => u.defId));
+      add(this.add.text(0, y + 2, `CREATURES (${members.length})  ·  tap one`, { fontFamily: FONT_DISPLAY, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5, 0));
+      const PER_ROW = 6;
+      const CELL = 44;
+      const gridTop = y + 26;
+      members.forEach((c, i) => {
+        const col = i % PER_ROW;
+        const row = Math.floor(i / PER_ROW);
+        const inRow = Math.min(PER_ROW, members.length - row * PER_ROW);
+        const cx = (col - (inRow - 1) / 2) * CELL;
+        const cy = gridTop + row * CELL + CELL / 2;
+        const unlocked = this.run.inPool(c.id);
+        const inArmy = owned.has(c.id);
+        const g = add(this.add.graphics());
+        g.fillStyle(COLORS.panelLight, unlocked ? 0.7 : 0.3).fillRoundedRect(cx - 20, cy - 20, 40, 40, 8);
+        g.lineStyle(inArmy ? 3 : 2, inArmy ? COLORS.good : RARITY[c.rarity].color, unlocked ? 1 : 0.4).strokeRoundedRect(cx - 20, cy - 20, 40, 40, 8);
+        const img = add(this.add.image(cx, cy, creatureKey(c.id)).setScale(artScale(this, c.id, 36)));
+        if (!unlocked) img.setTint(0x2a2d44);
+        const zone = add(this.add.zone(cx, cy, 42, 42).setInteractive({ useHandCursor: true }));
+        zone.on('pointerup', () => {
+          this.preview = c.id;
+          this.renderInfo();
+        });
+      });
+      const gridBottom = gridTop + Math.ceil(members.length / PER_ROW) * CELL;
       add(
         this.add
-          .text(0, y + 26, members.sort((a, b) => a.rarity - b.rarity).map((c) => `${c.name} (${RARITY[c.rarity].name})`).join(',  '), style(14, COLORS.textDim))
+          .text(0, gridBottom + 8, 'Green = in your army  ·  dim = locked\nCounts DIFFERENT creatures only', style(12, '#ffd166', true))
           .setOrigin(0.5, 0)
-          .setLineSpacing(3),
+          .setLineSpacing(2),
       );
-      add(this.add.text(0, 418, 'Counts DIFFERENT creatures only', style(13, '#ffd166', true)).setOrigin(0.5, 0));
       return;
     }
 
@@ -446,11 +482,27 @@ export class ShopScene extends Phaser.Scene {
     }
     const look = add(this.add.text(0, y + 2, `"${def.look}"`, { ...style(13, COLORS.textDim), fontStyle: 'italic' }).setOrigin(0.5, 0));
     y += look.height + 14;
-    add(
-      this.add
-        .text(0, Math.max(y, 380), sel?.kind === 'shop' ? 'Tap an army slot to buy' : 'Tap another slot to move or merge', style(14, '#ffd166', true))
-        .setOrigin(0.5, 0),
-    );
+    if (!sel && this.preview && this.trait) {
+      const back = add(
+        this.add
+          .text(0, Math.max(y, 380), `< Back to ${TRAITS[this.trait].name}`, style(14, '#ffd166', true))
+          .setOrigin(0.5, 0)
+          .setInteractive({ useHandCursor: true }),
+      );
+      back.on('pointerup', () => {
+        this.preview = null;
+        this.renderInfo();
+      });
+      if (!this.run.inPool(def.id)) {
+        add(this.add.text(0, Math.max(y, 380) + 24, `Locked: unlocks at Commander Lv ${def.unlock}`, style(12, COLORS.textDim, true)).setOrigin(0.5, 0));
+      }
+    } else {
+      add(
+        this.add
+          .text(0, Math.max(y, 380), sel?.kind === 'shop' ? 'Tap an army slot to buy' : 'Tap another slot to move or merge', style(14, '#ffd166', true))
+          .setOrigin(0.5, 0),
+      );
+    }
   }
 
   // ── Input ────────────────────────────────────────────────
