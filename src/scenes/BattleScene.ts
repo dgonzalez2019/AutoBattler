@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { ART_SIZE, creatureKey } from '../art/creatureArt';
 import { ELEMENT_INFO } from '../data/elements';
+import { TRAITS } from '../data/traits';
+import { ALL_TRAITS } from '../game/synergy';
 import type { ArmySnapshot } from '../game/army';
 import type { Run } from '../game/run';
 import { DT, FIELD_H, FIELD_W, FieldBattle, type BattleResult, type FieldEvent, type FieldUnit } from '../sim/field';
@@ -105,6 +107,19 @@ export class BattleScene extends Phaser.Scene {
       this.add.text(W - 40, 100, '', countStyle).setOrigin(1, 0.5).setDepth(950),
     ];
     this.bars = this.add.graphics().setDepth(950);
+    // Active synergies for each side
+    this.battle.traits.forEach((levels, side) => {
+      const active = ALL_TRAITS.filter((t) => levels[t] > 0).map((t) => `${TRAITS[t].name} ${levels[t]}`);
+      this.add
+        .text(side === 0 ? 40 : W - 40, 128, active.join('  ·  ') || 'No synergies', {
+          fontFamily: FONT_BODY,
+          fontSize: '15px',
+          fontStyle: 'bold',
+          color: active.length ? '#ffd166' : '#9aa3c7',
+        })
+        .setOrigin(side === 0 ? 0 : 1, 0.5)
+        .setDepth(950);
+    });
   }
 
   private intro(data: BattleInit) {
@@ -188,6 +203,21 @@ export class BattleScene extends Phaser.Scene {
       const pct = Phaser.Math.Clamp(u.hp / u.maxHp, 0, 1);
       g.fillStyle(0x000000, 0.6).fillRect(x - w / 2, y - r * 1.9, w, 4);
       g.fillStyle(SIDE_COLOR[u.side], 1).fillRect(x - w / 2, y - r * 1.9, w * pct, 4);
+      if (u.shield > 0) {
+        const sp = Math.min(1, u.shield / u.maxHp);
+        g.fillStyle(0xe0fbfc, 1).fillRect(x - w / 2, y - r * 1.9 - 4, w * sp, 3);
+        g.lineStyle(2, 0x9bf6ff, 0.55).strokeCircle(x, y, r * 1.35);
+      }
+      if (u.burn > 0) {
+        const flick = 0.6 + 0.4 * Math.sin(this.time.now / 70 + u.id);
+        g.fillStyle(0xff6a3d, flick).fillTriangle(x - 5, y - r * 2.1, x + 5, y - r * 2.1, x, y - r * 2.1 - 10 - u.burn);
+        g.fillStyle(0xffd166, flick).fillTriangle(x - 2, y - r * 2.1, x + 2, y - r * 2.1, x, y - r * 2.1 - 5 - u.burn / 2);
+      }
+      if (u.chill > 0) {
+        if (!s.img.isTinted) s.img.setTint(0x9bdcff);
+      } else if (s.img.isTinted && s.img.tintFill === false) {
+        s.img.clearTint();
+      }
     }
 
     // Projectiles
@@ -253,13 +283,29 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'hit': {
         if (!s) return;
-        s.img.setTintFill(0xffffff);
-        this.time.delayedCall(70, () => s.img.active && s.img.clearTint());
-        if (e.ability || e.eff === 'super') {
-          floatText(this, s.img.x, s.img.y - 26, `-${e.dmg}`, e.eff === 'super' ? '#ffd166' : '#ff5d73', 18);
+        if (!e.burn) {
+          s.img.setTintFill(0xffffff);
+          this.time.delayedCall(70, () => s.img.active && s.img.clearTint());
         }
+        if (e.crit) floatText(this, s.img.x, s.img.y - 30, `CRIT ${e.dmg}`, '#ff4d6d', 20);
+        else if (e.burn) floatText(this, s.img.x, s.img.y - 26, `${e.dmg}`, '#ff8c42', 15);
+        else if (e.ability || e.eff === 'super') floatText(this, s.img.x, s.img.y - 26, `-${e.dmg}`, e.eff === 'super' ? '#ffd166' : '#ff5d73', 18);
         return;
       }
+      case 'heal':
+        if (s && e.amount >= 2) floatText(this, s.img.x, s.img.y - 26, `+${e.amount}`, '#06d6a0', 16);
+        return;
+      case 'shield':
+        if (s) {
+          const ring = this.add.circle(s.img.x, s.img.y, u!.radius * 1.4, 0x9bf6ff, 0.25).setStrokeStyle(2, 0xe0fbfc).setDepth(850);
+          this.tweens.add({ targets: ring, alpha: 0, scale: 1.3, duration: 400, onComplete: () => ring.destroy() });
+        }
+        return;
+      case 'shieldBreak':
+        if (s) this.burst(s.img.x, s.img.y, 0x9bf6ff);
+        return;
+      case 'status':
+        return;
       case 'death': {
         if (!u || !s) return;
         this.burst(s.img.x, s.img.y, ELEMENT_INFO[u.element].color);

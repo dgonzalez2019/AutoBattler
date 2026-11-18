@@ -5,6 +5,8 @@ import type { ArmySnapshot, SquadSpec } from './army';
 import { emptyModules, MODULES, moduleBonus, type ModuleId, type ModuleLevels } from './mothership';
 
 export const MAX_SQUADS = 5;
+/** Health gained per merge (attack gains 1). */
+export const MERGE_HP = 2;
 
 export interface TeamUnit extends SquadSpec {
   /** Merge experience: level 2 at 2 xp, level 3 at 5 xp. */
@@ -145,36 +147,41 @@ export class Run {
 
   private mergeInto(target: TeamUnit, source: TeamUnit) {
     target.atk = Math.max(target.atk, source.atk) + 1;
-    target.hp = Math.max(target.hp, source.hp) + 1;
+    target.hp = Math.max(target.hp, source.hp) + MERGE_HP;
     target.xp = Math.min(5, target.xp + source.xp + 1);
     target.level = levelForXp(target.xp);
   }
 
   private fireShopTrigger(unit: TeamUnit, trigger: 'buy' | 'sell' | 'endTurn') {
-    const ab = getDef(unit.defId).ability;
-    if (!ab || ab.trigger !== trigger) return;
-    this.applyShopEffect(unit, ab.effect);
+    for (const ab of getDef(unit.defId).abilities) {
+      if (ab.trigger !== trigger) continue;
+      for (const e of ab.effects) this.applyShopEffect(unit, e);
+    }
   }
 
+  /** Shop abilities: buffs between squads and gold. Battle-only effects do nothing here. */
   private applyShopEffect(src: TeamUnit, effect: Effect) {
     const lv = src.level;
-    const allies = this.team.filter((u): u is TeamUnit => !!u && u !== src);
-    const add = (u: TeamUnit, atk: number, hp: number) => {
-      u.atk += scaled(atk, lv);
-      u.hp += scaled(hp, lv);
-    };
-    switch (effect.kind) {
-      case 'buffSelf':
-        add(src, effect.atk, effect.hp);
-        break;
-      case 'buffRandomAlly':
-        if (allies.length) add(this.rng.pick(allies), effect.atk, effect.hp);
-        break;
-      case 'buffAllAllies':
-        for (const a of allies) add(a, effect.atk, effect.hp);
-        break;
-      default:
-        break; // battle-only effects do nothing in the shop
+    if (effect.kind === 'gold') {
+      this.gold += scaled(effect.amount, lv);
+      return;
+    }
+    if (effect.kind !== 'buff') return;
+    const others = this.team.filter((u): u is TeamUnit => !!u && u !== src);
+    const pool =
+      effect.to === 'self'
+        ? [src]
+        : effect.to === 'randomAlly'
+          ? others.length
+            ? [this.rng.pick(others)]
+            : []
+          : effect.to === 'allAllies'
+            ? others
+            : [];
+    for (const u of pool) {
+      if (effect.element && getDef(u.defId).element !== effect.element) continue;
+      u.atk = Math.max(0, u.atk + scaled(effect.atk, lv));
+      u.hp += scaled(effect.hp, lv);
     }
   }
 

@@ -26,9 +26,13 @@ export interface ArmySnapshot {
 
 const LEVEL_SIZE = [1, 1.5, 2];
 
+/** Extra units per Swarm squad at each Swarm synergy tier. */
+export const SWARM_EXTRA = [0, 2, 4];
+
 /** How many creatures a squad fields in battle. */
-export function squadCount(defId: string, level: number, barracksLevel = 0): number {
-  const base = getDef(defId).squad;
+export function squadCount(defId: string, level: number, barracksLevel = 0, swarmTier = 0): number {
+  const def = getDef(defId);
   const mult = LEVEL_SIZE[level - 1] * (1 + moduleBonus('barracks', barracksLevel) / 100);
-  return Math.max(1, Math.round(base * mult));
+  const extra = def.class === 'swarm' ? SWARM_EXTRA[swarmTier] : 0;
+  return Math.max(1, Math.round(def.squad * mult) + extra);
 }

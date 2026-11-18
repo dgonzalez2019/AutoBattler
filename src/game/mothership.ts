@@ -30,7 +30,7 @@ export function moduleBonus(id: ModuleId, level: number): number {
     case 'armory':
       return level;
     case 'shields':
-      return level * 2;
+      return level * 4;
     case 'reactor':
       return level;
   }
