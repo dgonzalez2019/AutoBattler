@@ -17,7 +17,7 @@ describe('Run', () => {
     run.team[2] = { defId: 'gearhound', atk: 3, hp: 3, level: 1, xp: 0 };
     run.move(1, 0);
     run.move(2, 0);
-    expect(run.team[0]).toMatchObject({ level: 2, xp: 2, atk: 5, hp: 7 });
+    expect(run.team[0]).toMatchObject({ level: 2, xp: 2, atk: 6, hp: 10 }); // merges +2/+4, evolution +1/+3
     expect(run.team[1]).toBeNull();
   });
 

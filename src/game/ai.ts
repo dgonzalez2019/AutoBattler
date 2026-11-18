@@ -1,5 +1,6 @@
 import { COMMANDER_LIST } from '../data/commanders';
 import { getDef } from '../data/creatures';
+import { EVOLVE_BONUS } from '../data/evolutions';
 import { Rng } from '../sim/rng';
 import type { ArmySnapshot, SquadSpec } from './army';
 import { emptyModules, MODULES } from './mothership';
@@ -28,12 +29,18 @@ export function generateOpponent(round: number, seed: number): ArmySnapshot {
     const def = fits.length && rng.next() < 0.65 ? rng.pick(fits) : rng.pick(pool);
     const level = round >= 7 && rng.next() < 0.35 ? 3 : round >= 4 && rng.next() < 0.4 ? 2 : 1;
     const merges = level === 3 ? 5 : level === 2 ? 2 : 0;
+    // Same evolution stat jumps a player gets when merging to level 2 / 3.
+    const evo = { atk: 0, hp: 0 };
+    for (let lv = 2; lv <= level; lv++) {
+      evo.atk += EVOLVE_BONUS[lv].atk;
+      evo.hp += EVOLVE_BONUS[lv].hp;
+    }
     const extra = rng.int(Math.max(1, Math.floor(round / 2)));
     const extraAtk = rng.int(extra + 1);
     squads.push({
       defId: def.id,
-      atk: def.atk + merges + extraAtk,
-      hp: def.hp + merges * MERGE_HP + (extra - extraAtk) * 2,
+      atk: def.atk + merges + extraAtk + evo.atk,
+      hp: def.hp + merges * MERGE_HP + (extra - extraAtk) * 2 + evo.hp,
       level,
     });
   }

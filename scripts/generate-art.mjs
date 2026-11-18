@@ -72,39 +72,6 @@ export async function toSprite(png, flip) {
   return img.webp({ quality: 92, alphaQuality: 100 }).toBuffer();
 }
 
-const args = process.argv.slice(2);
-const force = args.includes('--force');
-
-if (args.includes('--commanders')) {
-  await generateCommanders(args.filter((a) => !a.startsWith('--')), force);
-  process.exit(0);
-}
-if (args.includes('--reexport')) {
-  // Rebuild sprites from the saved originals in art-source/ (no API calls).
-  for (const c of await loadCreatures()) {
-    const png = await readFile(new URL(`${c.id}.png`, RAW)).catch(() => null);
-    if (!png) continue;
-    await writeFile(new URL(`${c.id}.webp`, OUT), await toSprite(png, FLIP.has(c.id)));
-    console.log(`re-exported ${c.id}`);
-  }
-  process.exit(0);
-}
-const only = args.filter((a) => !a.startsWith('--'));
-const all = await loadCreatures();
-const todo = [];
-for (const c of all) {
-  if (only.length && !only.includes(c.id)) continue;
-  const exists = await access(new URL(`${c.id}.webp`, OUT)).then(() => true, () => false);
-  if (exists && !force) continue;
-  todo.push(c);
-}
-console.log(`generating ${todo.length} of ${all.length} creatures with ${MODEL}`);
-// A few at a time to stay well within rate limits.
-for (let i = 0; i < todo.length; i += 4) {
-  const results = await Promise.allSettled(todo.slice(i, i + 4).map(generate));
-  for (const r of results) if (r.status === 'rejected') console.error(String(r.reason));
-}
-
 // ── Commander portraits ───────────────────────────────────
 
 async function loadCommanders() {
@@ -155,3 +122,120 @@ async function generateCommanders(only, force) {
     for (const r of results) if (r.status === 'rejected') console.error(String(r.reason));
   }
 }
+
+// ── Evolutions ────────────────────────────────────────────
+async function loadEvolutions() {
+  const src = await readFile(new URL('../src/data/evolutions.ts', import.meta.url), 'utf8');
+  return Object.fromEntries([...src.matchAll(/^  (\w+): \['(\w+)', '(\w+)'\]/gm)].map(([, id, a, b]) => [id, [a, b]]));
+}
+
+const STAGE_TEXT = {
+  2: 'Draw its EVOLVED form (stage 2 of 3): bigger, more confident and more powerful, with more developed features and a few new details.',
+  3: 'Draw its FINAL evolution (stage 3 of 3): a large, majestic, fully-powered apex form with impressive new features and a heroic presence.',
+};
+
+class OutOfCredits extends Error {}
+
+async function generateEvolutions(stages, only, force) {
+  const creatures = Object.fromEntries((await loadCreatures()).map((c) => [c.id, c]));
+  const evos = await loadEvolutions();
+  for (const stage of stages) {
+    const todo = [];
+    for (const id of Object.keys(evos)) {
+      if (only.length && !only.includes(id)) continue;
+      const out = new URL(`${id}@${stage}.webp`, OUT);
+      const exists = await access(out).then(() => true, () => false);
+      if (exists && !force) continue;
+      todo.push(id);
+    }
+    console.log(`stage ${stage}: generating ${todo.length} evolutions`);
+    const one = async (id) => {
+      const c = creatures[id];
+      // Stage 2 builds on the base art; stage 3 on stage 2, so each line stays consistent.
+      const srcFile = stage === 2 ? `${id}.png` : `${id}@2.png`;
+      let input = await readFile(new URL(srcFile, RAW)).catch(() => null);
+      if (!input) throw new Error(`${id}@${stage}: missing art-source/${srcFile}`);
+      // Feed a right-facing reference so the evolution faces right too.
+      if (stage === 2 && FLIP.has(id)) input = await sharp(input).flop().png().toBuffer();
+      const name = evos[id][stage - 2];
+      const prompt = [
+        'This is a creature from a sci-fi monster-collecting game.',
+        STAGE_TEXT[stage],
+        'Keep the same species identity, color palette, element theme and art style (glossy cel shading, bold clean dark outline). It must clearly be the same creature line, not a different creature.',
+        'Full body, three-quarter side view facing RIGHT, centered. Fully transparent background, no text, no ground, no shadow.',
+        `It is now named ${name}. Original concept: ${c.look}.`,
+      ].join(' ');
+      const form = new FormData();
+      form.append('model', MODEL);
+      form.append('image[]', new Blob([input], { type: 'image/png' }), 'base.png');
+      form.append('prompt', prompt);
+      form.append('background', 'transparent');
+      form.append('quality', 'medium');
+      form.append('size', '1024x1024');
+      const res = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: form,
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        const code = body.error?.code ?? '';
+        if (res.status === 429 && /credit|quota/.test(code + (body.error?.type ?? ''))) throw new OutOfCredits(code);
+        throw new Error(`${id}@${stage}: ${res.status} ${JSON.stringify(body.error ?? body)}`);
+      }
+      const png = Buffer.from(body.data[0].b64_json, 'base64');
+      await writeFile(new URL(`${id}@${stage}.png`, RAW), png);
+      await writeFile(new URL(`${id}@${stage}.webp`, OUT), await toSprite(png, false));
+      console.log(`ok ${id}@${stage} (${name})`);
+    };
+    for (let i = 0; i < todo.length; i += 4) {
+      const results = await Promise.allSettled(todo.slice(i, i + 4).map(one));
+      for (const r of results) if (r.status === 'rejected') console.error(String(r.reason));
+      if (results.some((r) => r.status === 'rejected' && r.reason instanceof OutOfCredits)) {
+        console.error('STOPPED: out of OpenAI credits. Re-run later to continue where this left off.');
+        return;
+      }
+    }
+  }
+}
+
+// ── Main (kept last so every definition above is initialised) ──
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+
+if (args.includes('--evolutions')) {
+  const stages = args.includes('--stage3') ? [3] : args.includes('--stage2') ? [2] : [2, 3];
+  await generateEvolutions(stages, args.filter((a) => !a.startsWith('--')), force);
+  process.exit(0);
+}
+
+if (args.includes('--commanders')) {
+  await generateCommanders(args.filter((a) => !a.startsWith('--')), force);
+  process.exit(0);
+}
+if (args.includes('--reexport')) {
+  // Rebuild sprites from the saved originals in art-source/ (no API calls).
+  for (const c of await loadCreatures()) {
+    const png = await readFile(new URL(`${c.id}.png`, RAW)).catch(() => null);
+    if (!png) continue;
+    await writeFile(new URL(`${c.id}.webp`, OUT), await toSprite(png, FLIP.has(c.id)));
+    console.log(`re-exported ${c.id}`);
+  }
+  process.exit(0);
+}
+const only = args.filter((a) => !a.startsWith('--'));
+const all = await loadCreatures();
+const todo = [];
+for (const c of all) {
+  if (only.length && !only.includes(c.id)) continue;
+  const exists = await access(new URL(`${c.id}.webp`, OUT)).then(() => true, () => false);
+  if (exists && !force) continue;
+  todo.push(c);
+}
+console.log(`generating ${todo.length} of ${all.length} creatures with ${MODEL}`);
+// A few at a time to stay well within rate limits.
+for (let i = 0; i < todo.length; i += 4) {
+  const results = await Promise.allSettled(todo.slice(i, i + 4).map(generate));
+  for (const r of results) if (r.status === 'rejected') console.error(String(r.reason));
+}
+

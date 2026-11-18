@@ -1,5 +1,6 @@
 import { getCommander, type CommanderDef } from '../data/commanders';
 import { CREATURES, getDef, scaled, SHOP_POOL, type CreatureDef, type Effect } from '../data/creatures';
+import { EVOLVE_BONUS } from '../data/evolutions';
 import { RARITY, rollRarity, sellValue } from '../data/rarity';
 import type { BattleResult } from '../sim/field';
 import { Rng, randomSeed } from '../sim/rng';
@@ -221,7 +222,13 @@ export class Run {
     target.atk = Math.max(target.atk, source.atk) + 1;
     target.hp = Math.max(target.hp, source.hp) + MERGE_HP;
     target.xp = Math.min(5, target.xp + source.xp + 1);
+    const before = target.level;
     target.level = levelForXp(target.xp);
+    // Each evolution (level 2, level 3) adds a one-time stat jump.
+    for (let lv = before + 1; lv <= target.level; lv++) {
+      target.atk += EVOLVE_BONUS[lv].atk;
+      target.hp += EVOLVE_BONUS[lv].hp;
+    }
   }
 
   private fireShopTrigger(unit: TeamUnit, trigger: 'buy' | 'sell' | 'endTurn') {

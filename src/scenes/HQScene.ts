@@ -3,6 +3,7 @@ import { commanderBadge } from '../art/commanderArt';
 import { artScale, creatureKey } from '../art/creatureArt';
 import { COMMANDER_LIST, COMMANDERS, getCommander } from '../data/commanders';
 import { abilityTexts, SHOP_POOL, type CreatureDef } from '../data/creatures';
+import { evolves, formName } from '../data/evolutions';
 import { ELEMENT_INFO, ELEMENTS } from '../data/elements';
 import { rewardTrack } from '../data/progression';
 import { hexColor, RARITY } from '../data/rarity';
@@ -253,7 +254,15 @@ export class HQScene extends Phaser.Scene {
     );
     this.keep(
       this.add
-        .text(330, 606, abilityTexts(c, 1).join('\n'), { fontFamily: FONT_BODY, fontSize: '13px', color: '#e8ecff', wordWrap: { width: 560 } })
+        .text(
+          330,
+          606,
+          [
+            ...abilityTexts(c, 1),
+            evolves(c) ? `Evolves: ${c.name} > ${formName(c, 2)} (Lv 2) > ${formName(c, 3)} (Lv 3)` : 'Legendary: Ascends at Lv 2 and 3',
+          ].join('\n'),
+          { fontFamily: FONT_BODY, fontSize: '13px', color: '#e8ecff', wordWrap: { width: 560 } },
+        )
         .setOrigin(0, 0.5),
     );
     if (!has) {

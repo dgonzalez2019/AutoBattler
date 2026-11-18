@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { abilityTexts, CREATURES, getDef } from '../data/creatures';
+import { EVOLVE_BONUS, evolves, formName } from '../data/evolutions';
 import { ELEMENT_INFO } from '../data/elements';
 import { CLASS_INFO, TRAITS, type TraitId } from '../data/traits';
 import { ALL_TRAITS, computeTraits } from '../game/synergy';
@@ -11,7 +12,7 @@ import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } f
 import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
-import { button, drawBackground, panel, toast, type Button } from '../ui/widgets';
+import { button, drawBackground, panel, toast, wait, type Button } from '../ui/widgets';
 import { commanderBadge } from '../art/commanderArt';
 import { artScale, creatureKey } from '../art/creatureArt';
 
@@ -450,7 +451,7 @@ export class ShopScene extends Phaser.Scene {
     const el = ELEMENT_INFO[def.element];
     const cl = TRAITS[def.class];
     const swarm = computeTraits(this.run.team.filter((u): u is NonNullable<typeof u> => !!u)).levels.swarm;
-    add(this.add.text(0, 0, def.name.toUpperCase(), { fontFamily: FONT_DISPLAY, fontSize: '28px', color: hex(el.color) }).setOrigin(0.5, 0));
+    add(this.add.text(0, 0, formName(def, unit.level).toUpperCase(), { fontFamily: FONT_DISPLAY, fontSize: '28px', color: hex(el.color) }).setOrigin(0.5, 0));
     // Element + class chips
     const chip = (x: number, text: string, color: number) => {
       const t = this.add
@@ -473,6 +474,14 @@ export class ShopScene extends Phaser.Scene {
     );
     let y = 72 + stats.height + 8;
     const role = add(this.add.text(0, y, def.role, { ...style(14, '#e0aaff', true) }).setOrigin(0.5, 0));
+    // Evolution line, current form highlighted
+    const line = [1, 2, 3].map((lv) => (lv === unit.level ? `[${formName(def, lv)}]` : formName(def, lv)));
+    const evoText = add(
+      this.add
+        .text(0, y + role.height + 4, evolves(def) ? `Evolves: ${line.join(' > ')}` : def.rarity === 5 ? 'Legendary: Ascends at Lv 2 and 3' : '', style(12, '#9bf6ff', true))
+        .setOrigin(0.5, 0),
+    );
+    y += evoText.height + 4;
     y += role.height + 10;
     for (const line of abilityTexts(def, unit.level)) {
       const i = line.indexOf(':');
@@ -522,7 +531,7 @@ export class ShopScene extends Phaser.Scene {
     } else if (s?.kind === 'team') {
       if (s.index === i) this.selected = null;
       else {
-        this.run.move(s.index, i);
+        this.watchEvolution(i, () => this.run.move(s.index, i));
         this.selected = null;
       }
     } else if (this.run.team[i]) {
@@ -536,7 +545,7 @@ export class ShopScene extends Phaser.Scene {
     if (teamIdx !== null) {
       if (sel.kind === 'shop') this.tryBuy(sel.index, teamIdx);
       else if (teamIdx !== sel.index) {
-        this.run.move(sel.index, teamIdx);
+        this.watchEvolution(teamIdx, () => this.run.move(sel.index, teamIdx));
         this.selected = null;
       }
     } else if (sel.kind === 'team' && this.btn.sell.getBounds().contains(x, y)) {
@@ -558,11 +567,100 @@ export class ShopScene extends Phaser.Scene {
       toast(this, 'Not enough gold');
       return;
     }
-    if (!this.run.buy(shopIdx, teamIdx)) {
+    if (!this.watchEvolution(teamIdx, () => this.run.buy(shopIdx, teamIdx))) {
       toast(this, 'That slot is taken');
       return;
     }
     this.selected = null;
+  }
+
+  /** Run a merge; if the creature in `teamIdx` leveled up, play its evolution. */
+  private watchEvolution(teamIdx: number, action: () => boolean): boolean {
+    const before = this.run.team[teamIdx]?.level ?? 0;
+    const ok = action();
+    const after = this.run.team[teamIdx];
+    if (ok && after && before && after.level > before) {
+      const { defId, level } = after;
+      this.time.delayedCall(30, () => void this.playEvolution(defId, before, level));
+    }
+    return ok;
+  }
+
+  /** Full-screen evolution: the old form pulses, flashes white and becomes the new one. */
+  private async playEvolution(defId: string, from: number, to: number) {
+    const def = getDef(defId);
+    const cx = 640;
+    const cy = 330;
+    const layer = this.add.container(0, 0).setDepth(500);
+    const shade = this.add.rectangle(640, 360, 1280, 720, 0x05060f, 0).setInteractive();
+    layer.add(shade);
+    this.tweens.add({ targets: shade, fillAlpha: 0.88, duration: 250 });
+    const glow = this.add.circle(cx, cy, 120, ELEMENT_INFO[def.element].color, 0.2);
+    const old = this.add.image(cx, cy, creatureKey(defId, from)).setScale(artScale(this, defId, 230, from));
+    const next = this.add.image(cx, cy, creatureKey(defId, to)).setScale(artScale(this, defId, 250, to)).setAlpha(0);
+    const title = this.add
+      .text(cx, 110, 'WHAT?', { fontFamily: FONT_DISPLAY, fontSize: '34px', color: '#ffffff' })
+      .setOrigin(0.5)
+      .setAlpha(0);
+    const caption = this.add
+      .text(cx, 530, `${formName(def, from)} is evolving...`, { fontFamily: FONT_DISPLAY, fontSize: '30px', color: '#ffffff', stroke: '#000000', strokeThickness: 6 })
+      .setOrigin(0.5);
+    layer.add([glow, old, next, title, caption]);
+    let skipped = false;
+    shade.once('pointerup', () => (skipped = true));
+    const pause = (ms: number) => (skipped ? Promise.resolve() : wait(this, ms));
+
+    this.tweens.add({ targets: title, alpha: 1, duration: 200 });
+    // Accelerating white flicker
+    for (const ms of [260, 200, 150, 110, 80, 60]) {
+      old.setTintFill(0xffffff);
+      await pause(ms);
+      old.clearTint();
+      await pause(ms * 0.8);
+    }
+    // Flash and swap
+    const flash = this.add.circle(cx, cy, 30, 0xffffff, 1);
+    layer.add(flash);
+    this.tweens.add({ targets: flash, scale: 14, alpha: 0, duration: 500, ease: 'Cubic.easeOut' });
+    old.setVisible(false);
+    next.setAlpha(1).setTintFill(0xffffff);
+    await pause(160);
+    next.clearTint();
+    this.tweens.add({ targets: glow, scale: 1.6, alpha: 0.35, duration: 500 });
+    this.tweens.add({ targets: next, scale: next.scale * 1.08, duration: 180, yoyo: true });
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      const p = this.add.circle(cx, cy, 5, i % 2 ? ELEMENT_INFO[def.element].accent : 0xffd166);
+      layer.add(p);
+      this.tweens.add({ targets: p, x: cx + Math.cos(a) * 220, y: cy + Math.sin(a) * 220, alpha: 0, duration: 700, ease: 'Cubic.easeOut' });
+    }
+    const bonus = EVOLVE_BONUS[to];
+    title.setText(evolves(def) ? 'EVOLUTION!' : 'ASCENSION!').setColor('#ffd166');
+    caption.setText(
+      evolves(def)
+        ? `${formName(def, from)} evolved into ${formName(def, to)}!`
+        : `${def.name} ascended!`,
+    );
+    const stats = this.add
+      .text(cx, 575, `+${bonus.atk} attack  ·  +${bonus.hp} health  ·  bigger squad, stronger abilities`, {
+        fontFamily: FONT_BODY,
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#06d6a0',
+      })
+      .setOrigin(0.5);
+    const hint = this.add.text(cx, 640, 'Tap to continue', { fontFamily: FONT_BODY, fontSize: '16px', color: COLORS.textDim }).setOrigin(0.5);
+    layer.add([stats, hint]);
+    await new Promise<void>((resolve) => {
+      if (skipped) {
+        resolve();
+        return;
+      }
+      shade.once('pointerup', () => resolve());
+      this.time.delayedCall(2600, resolve);
+    });
+    this.tweens.add({ targets: layer, alpha: 0, duration: 200, onComplete: () => layer.destroy() });
+    this.refresh();
   }
 
   private onReroll() {

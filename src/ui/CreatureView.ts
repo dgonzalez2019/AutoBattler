@@ -30,8 +30,15 @@ export class CreatureView extends Phaser.GameObjects.Container {
     this.ring = scene.add.graphics();
     this.ring.fillStyle(color, 0.18).fillEllipse(0, size * 0.36, size * 0.9, size * 0.22);
 
-    const scale = artScale(scene, def.id, size);
-    this.art = scene.add.image(0, 0, creatureKey(def.id)).setScale(scale).setFlipX(flip);
+    // Evolved forms draw a little larger; Ascended legendaries get a golden aura.
+    const grown = size * (1 + 0.06 * (data.level - 1));
+    const scale = artScale(scene, def.id, grown, data.level);
+    if (def.rarity === 5 && data.level >= 2) {
+      const aura = scene.add.circle(0, 0, size * 0.42, 0xffd166, 0.22).setStrokeStyle(3, 0xffd166, 0.7);
+      scene.tweens.add({ targets: aura, scale: 1.12, alpha: 0.5, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.add(aura);
+    }
+    this.art = scene.add.image(0, 0, creatureKey(def.id, data.level)).setScale(scale).setFlipX(flip);
     // Gentle idle bob so the board feels alive.
     scene.tweens.add({
       targets: this.art,

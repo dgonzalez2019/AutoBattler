@@ -4,8 +4,10 @@ import { ELEMENT_INFO } from '../data/elements';
 
 /**
  * Real creature art lives in src/assets/creatures/<id>.png (or .webp).
+ * Evolved forms are <id>@2 and <id>@3.
  * Any creature without a file gets a procedurally drawn placeholder,
- * so art can be dropped in one creature at a time with no code changes.
+ * and a missing evolved form falls back to the highest form below it,
+ * so art can be dropped in one file at a time with no code changes.
  */
 const files = import.meta.glob('../assets/creatures/*.{png,webp}', {
   eager: true,
@@ -15,33 +17,46 @@ const files = import.meta.glob('../assets/creatures/*.{png,webp}', {
 
 export const ART_SIZE = 256;
 
-export function creatureKey(id: string): string {
-  return `creature-${id}`;
-}
+const textureName = (id: string, form: number) => (form > 1 ? `creature-${id}@${form}` : `creature-${id}`);
 
+/** Art file stem -> url, for base art (<id>) and evolved forms (<id>@2, <id>@3). */
 function artUrls(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [path, url] of Object.entries(files)) {
-    const id = path.split('/').pop()!.replace(/\.(png|webp)$/, '');
-    if (CREATURES[id]) out[id] = url;
+    const stem = path.split('/').pop()!.replace(/\.(png|webp)$/, '');
+    if (CREATURES[stem.split('@')[0]]) out[stem] = url;
   }
   return out;
 }
 
 const REAL_ART = new Set(Object.keys(artUrls()));
 
+/** Highest form at or below `level` that has art (1 = base). */
+export function formFor(id: string, level = 1): number {
+  for (let f = Math.min(3, level); f > 1; f--) if (REAL_ART.has(`${id}@${f}`)) return f;
+  return 1;
+}
+
+/** Texture key for a creature at a level: its evolved form's art when there is one. */
+export function creatureKey(id: string, level = 1): string {
+  return textureName(id, formFor(id, level));
+}
+
 /** Real art fills its frame edge to edge; placeholders leave padding. This evens them out. */
 const REAL_FILL = 0.85;
 
 /** Scale that draws a creature roughly `size` pixels tall, whatever its texture resolution. */
-export function artScale(scene: Phaser.Scene, id: string, size: number): number {
-  const src = scene.textures.get(creatureKey(id)).getSourceImage() as { width: number };
+export function artScale(scene: Phaser.Scene, id: string, size: number, level = 1): number {
+  const src = scene.textures.get(creatureKey(id, level)).getSourceImage() as { width: number };
   return (size / src.width) * (REAL_ART.has(id) ? REAL_FILL : 1);
 }
 
 /** Call from a scene's preload(). */
 export function preloadCreatureArt(scene: Phaser.Scene) {
-  for (const [id, url] of Object.entries(artUrls())) scene.load.image(creatureKey(id), url);
+  for (const [stem, url] of Object.entries(artUrls())) {
+    const [id, form] = stem.split('@');
+    scene.load.image(textureName(id, Number(form ?? 1)), url);
+  }
 }
 
 /** Call from a scene's create(): draws placeholders for anything without real art. */

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { artScale, creatureKey } from '../art/creatureArt';
+import { getDef } from '../data/creatures';
 import { ELEMENT_INFO } from '../data/elements';
 import { TRAITS } from '../data/traits';
 import { ALL_TRAITS } from '../game/synergy';
@@ -184,8 +185,8 @@ export class BattleScene extends Phaser.Scene {
 
   private addSprite(u: FieldUnit, pop: boolean) {
     const size = u.radius * 4.5;
-    const baseScale = artScale(this, u.defId, size);
-    const img = this.add.image(OX + u.x, OY + u.y, creatureKey(u.defId)).setScale(baseScale).setFlipX(u.side === 1);
+    const baseScale = artScale(this, u.defId, size * (1 + 0.06 * (u.level - 1)), u.level);
+    const img = this.add.image(OX + u.x, OY + u.y, creatureKey(u.defId, u.level)).setScale(baseScale).setFlipX(u.side === 1);
     this.sprites.set(u.id, { img, baseScale, lunge: 0, lungeX: 0, lungeY: 0, hitUntil: 0, tint: null });
     if (pop) {
       img.setScale(0);
@@ -230,6 +231,10 @@ export class BattleScene extends Phaser.Scene {
       // Ground shadow + team ring, under the sprite
       const r = u.radius * k;
       gr.fillStyle(0x000000, 0.35).fillEllipse(x, y + r * 1.25, r * 2.3, r * 0.75);
+      if (u.level >= 2 && getDef(u.defId).rarity === 5) {
+        const pulse = 0.25 + 0.15 * Math.sin(this.time.now / 250);
+        gr.fillStyle(0xffd166, pulse).fillCircle(x, y, r * 1.6);
+      }
       gr.lineStyle(2, SIDE_COLOR[u.side], 0.85).strokeEllipse(x, y + r * 1.25, r * 2.5, r * 0.85);
       // Health bar only once damaged, so a fresh army stays clean
       const w = r * 2.2;
