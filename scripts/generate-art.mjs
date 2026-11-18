@@ -60,7 +60,9 @@ async function generate(c) {
 }
 
 /** Creatures the model drew facing left; mirrored so every sprite faces right. */
-const FLIP = new Set(['frostling', 'gearhound', 'mechadon', 'emberpup', 'pyrolisk', 'railhawk', 'blizzowl', 'mantidra', 'hammerhead', 'starbreaker', 'leechling', 'abyssal']);
+const FLIP = new Set(['frostling', 'gearhound', 'mechadon', 'emberpup', 'pyrolisk', 'railhawk', 'blizzowl', 'mantidra', 'hammerhead', 'starbreaker', 'leechling', 'abyssal', 'novaraptor']);
+/** Evolved forms ("id@stage") the model drew facing left. */
+const FLIP_EVO = new Set(['novaraptor@2', 'novaraptor@3']);
 
 /** Trim empty space, fit into a 256px square (high-quality downscale), mirror if needed. */
 export async function toSprite(png, flip) {
@@ -185,7 +187,7 @@ async function generateEvolutions(stages, only, force) {
       }
       const png = Buffer.from(body.data[0].b64_json, 'base64');
       await writeFile(new URL(`${id}@${stage}.png`, RAW), png);
-      await writeFile(new URL(`${id}@${stage}.webp`, OUT), await toSprite(png, false));
+      await writeFile(new URL(`${id}@${stage}.webp`, OUT), await toSprite(png, FLIP_EVO.has(`${id}@${stage}`)));
       console.log(`ok ${id}@${stage} (${name})`);
     };
     for (let i = 0; i < todo.length; i += 4) {
@@ -220,6 +222,11 @@ if (args.includes('--reexport')) {
     if (!png) continue;
     await writeFile(new URL(`${c.id}.webp`, OUT), await toSprite(png, FLIP.has(c.id)));
     console.log(`re-exported ${c.id}`);
+    for (const stage of [2, 3]) {
+      const evo = await readFile(new URL(`${c.id}@${stage}.png`, RAW)).catch(() => null);
+      if (!evo) continue;
+      await writeFile(new URL(`${c.id}@${stage}.webp`, OUT), await toSprite(evo, FLIP_EVO.has(`${c.id}@${stage}`)));
+    }
   }
   process.exit(0);
 }
