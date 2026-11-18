@@ -81,8 +81,8 @@ describe('commanders', () => {
     expect(new Run({ seed: 1, commander: 'prime' }).lives).toBe(7);
     const nova = new Run({ seed: 1, commander: 'nova' });
     nova.gold = 0;
-    nova.finishBattle('win'); // round 2: base 7 + win 1 + Nova 1
-    expect(nova.gold).toBe(9);
+    nova.finishBattle('win'); // round 2: base 10 + win 1 + Nova 1
+    expect(nova.gold).toBe(12);
   });
 
   it('economy creatures bank gold for next turn', () => {
@@ -91,8 +91,8 @@ describe('commanders', () => {
     run.endTurn();
     expect(run.bankedGold).toBe(2);
     run.gold = 0;
-    run.finishBattle('win'); // base 7 + win 1 + banked 2
-    expect(run.gold).toBe(10);
+    run.finishBattle('win'); // base 10 + win 1 + banked 2
+    expect(run.gold).toBe(13);
   });
 
   it('Thalia buffs Bio creatures on buy', () => {
@@ -225,9 +225,9 @@ describe('Endless lives', () => {
 });
 
 describe('economy', () => {
-  it('base income starts at 10, dips to 7 and climbs back to 10', async () => {
+  it('base income is 10 every round', async () => {
     const { baseIncome } = await import('./run');
-    expect([1, 2, 3, 4, 6, 8, 12].map(baseIncome)).toEqual([10, 7, 7, 8, 9, 10, 10]);
+    expect([1, 2, 3, 4, 6, 8, 12].map((r) => baseIncome(r))).toEqual([10, 10, 10, 10, 10, 10, 10]);
   });
 
   it('interest: +1 per 5 gold saved, max +3', async () => {
@@ -239,12 +239,12 @@ describe('economy', () => {
     const run = new Run({ seed: 1, commander: 'rook' });
     expect(run.gold).toBe(10); // round 1
     run.gold = 12; // saved
-    run.finishBattle('win'); // round 2: 12 + base 7 + interest 2 + win 1
-    expect(run.gold).toBe(22);
-    expect(run.lastIncome).toMatchObject({ base: 7, interest: 2, win: 1, total: 10 });
+    run.finishBattle('win'); // round 2: 12 + base 10 + interest 2 + win 1
+    expect(run.gold).toBe(25);
+    expect(run.lastIncome).toMatchObject({ base: 10, interest: 2, win: 1, total: 13 });
     run.gold = 3;
-    run.finishBattle('lose'); // round 3: 3 + 7 + 0
-    expect(run.gold).toBe(10);
+    run.finishBattle('lose'); // round 3: 3 + 10 + 0
+    expect(run.gold).toBe(13);
   });
 
   it('projected income shows what saving earns', () => {

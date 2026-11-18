@@ -63,7 +63,9 @@ function playRuns(bot: Bot, pool: string[], label: string, seed0: number) {
       }
       const me = run.snapshot('bot');
       const enemy = generateOpponent(run.round, rng.int(2 ** 31));
-      const result: BattleResult = new FieldBattle([me, enemy], rng.int(2 ** 31)).runToEnd();
+      const fight = new FieldBattle([me, enemy], rng.int(2 ** 31));
+      const result: BattleResult = fight.runToEnd();
+      run.applyBattleGrowth(fight.growth[0]);
       battles++;
       const t = byRound.get(run.round) ?? { w: 0, l: 0, d: 0 };
       if (result === 'win') t.w++;

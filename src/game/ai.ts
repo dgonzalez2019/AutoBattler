@@ -1,4 +1,5 @@
 import { COMMANDER_LIST } from '../data/commanders';
+import { getDef } from '../data/creatures';
 import { Rng } from '../sim/rng';
 import type { ArmySnapshot } from './army';
 import { botTurn, type BotMemory } from './bot';
@@ -29,6 +30,29 @@ export function aiSkill(round: number): number {
   return Math.min(1, 0.3 + round * 0.1);
 }
 
+/**
+ * AI armies are built without fighting, so approximate what battle-growth
+ * abilities earn a player: each squad that has one grows once, half the time.
+ */
+const GROWTH_CHANCE = 0.5;
+function simulateBattleGrowth(run: Run, rng: Rng) {
+  const growth = new Map<number, { atk: number; hp: number }>();
+  run.team
+    .filter((u): u is NonNullable<typeof u> => !!u)
+    .forEach((u, squad) => {
+      for (const ab of getDef(u.defId).abilities) {
+        for (const e of ab.effects) {
+          if (e.kind !== 'grow' || rng.next() >= GROWTH_CHANCE) continue;
+          const g = growth.get(squad) ?? { atk: 0, hp: 0 };
+          g.atk += e.atk * u.level;
+          g.hp += e.hp * u.level;
+          growth.set(squad, g);
+        }
+      }
+    });
+  run.applyBattleGrowth(growth);
+}
+
 /** First round where enemies start gaining Endless power. Normal runs end before this. */
 export const ENDLESS_SCALING_FROM = 14;
 const ENDLESS_STEP = 0.08;
@@ -57,7 +81,10 @@ export function generateOpponent(round: number, seed: number): ArmySnapshot {
     botTurn(run, rng, mem, aiSkill(r));
     run.gold += held;
     run.endTurn();
-    if (r < round) run.finishBattle('draw'); // advance the turn without touching lives
+    if (r < round) {
+      simulateBattleGrowth(run, rng);
+      run.finishBattle('draw'); // advance the turn without touching lives
+    }
   }
   const snap = run.snapshot(botName(rng));
   // Endless: past the point where armies max out, enemies keep getting stronger.

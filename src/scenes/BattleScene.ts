@@ -3,6 +3,7 @@ import { BLEED, fitCamera } from '../ui/viewport';
 import { artScale, creatureKey } from '../art/creatureArt';
 import { getDef } from '../data/creatures';
 import { ELEMENT_INFO } from '../data/elements';
+import { formName } from '../data/evolutions';
 import { TRAITS } from '../data/traits';
 import { ALL_TRAITS } from '../game/synergy';
 import type { ArmySnapshot } from '../game/army';
@@ -60,6 +61,7 @@ export class BattleScene extends Phaser.Scene {
   private running = false;
   private finished = false;
   private speedBtn!: Button;
+  private growthApplied = false;
 
   constructor() {
     super('Battle');
@@ -70,6 +72,7 @@ export class BattleScene extends Phaser.Scene {
     this.shots.clear();
     this.acc = 0;
     this.skipping = false;
+    this.growthApplied = false;
     this.running = false;
     this.finished = false;
     this.speedIdx = Number(this.registry.get('battleSpeed') ?? 0);
@@ -346,6 +349,9 @@ export class BattleScene extends Phaser.Scene {
       case 'shieldBreak':
         if (s) this.burst(s.img.x, s.img.y, 0x9bf6ff);
         return;
+      case 'grow':
+        if (s) floatText(this, s.img.x, s.img.y - 44, `grew +${e.atk}/+${e.hp}`, '#06d6a0', 17);
+        return;
       case 'status':
         return;
 
@@ -421,6 +427,30 @@ export class BattleScene extends Phaser.Scene {
       .text(W / 2, H / 2 + 60, 'Tap to continue', { fontFamily: FONT_BODY, fontSize: '24px', fontStyle: 'bold', color: '#ffffff' })
       .setOrigin(0.5)
       .setDepth(991);
+
+    // Battle growth: squads keep what they earned in this fight.
+    if (!this.growthApplied) {
+      this.growthApplied = true;
+      const grew = run.applyBattleGrowth(this.battle.growth[0]);
+      if (grew.length) {
+        const lines = grew.map((g) => {
+          const d = getDef(g.defId);
+          const stats = [g.atk && `+${g.atk} attack`, g.hp && `+${g.hp} health`].filter(Boolean).join(', ');
+          return `${formName(d, g.level)}: ${stats}`;
+        });
+        this.add
+          .text(W / 2, H / 2 + 110, ['PERMANENT GROWTH', ...lines].join('\n'), {
+            fontFamily: FONT_BODY,
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#06d6a0',
+            align: 'center',
+          })
+          .setOrigin(0.5, 0)
+          .setDepth(991)
+          .setLineSpacing(4);
+      }
+    }
 
     this.time.delayedCall(500, () => {
       this.input.once('pointerdown', () => {

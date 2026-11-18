@@ -16,6 +16,15 @@ export class Rng {
   pick<T>(arr: readonly T[]): T {
     return arr[this.int(arr.length)];
   }
+  /** A shuffled copy (Fisher-Yates). */
+  shuffled<T>(arr: readonly T[]): T[] {
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = this.int(i + 1);
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
 }
 
 export function randomSeed(): number {

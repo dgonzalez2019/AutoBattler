@@ -13,7 +13,12 @@ export const DUPLICATE_CHANCE = 0.25;
 /** Health gained per merge (attack gains 1). */
 export const MERGE_HP = 2;
 
+type ShopTrigger = 'buy' | 'sell' | 'endTurn' | 'startTurn' | 'allyBought' | 'evolve';
+
 export interface TeamUnit extends SquadSpec {
+  /** Permanent stats this squad has earned this run (shown on its card). */
+  grownAtk?: number;
+  grownHp?: number;
   /** Merge experience: level 2 at 2 xp, level 3 at 5 xp. */
   xp: number;
 }
@@ -32,9 +37,9 @@ export const MAX_INTEREST = 3;
 /** Extra gold after winning a battle. */
 export const WIN_BONUS = 1;
 
-/** Base income at the start of a round: 10 on round 1, then 7 rising to 10 by round 8. */
-export function baseIncome(round: number): number {
-  return round <= 1 ? START_GOLD : Math.min(10, 6 + Math.floor(round / 2));
+/** Base income: 10 gold every round (interest and the win bonus come on top). */
+export function baseIncome(_round: number): number {
+  return START_GOLD;
 }
 
 export function interestOn(saved: number, cap = MAX_INTEREST): number {
@@ -188,6 +193,7 @@ export class Run {
     this.gold = Math.min(MAX_GOLD, this.gold + this.lastIncome.total);
     this.bankedGold = 0;
     this.freeRerolls = (this.fx.freeRerollsPerTurn ?? 0) + this.meta.freeRerolls;
+    for (const u of this.team) if (u) this.fireShopTrigger(u, 'startTurn');
   }
 
   /** Breakdown of the gold received at the start of this turn. */
@@ -298,15 +304,18 @@ export class Run {
       this.team[teamIndex] = placed;
     }
     this.fireShopTrigger(placed, 'buy');
+    // Other squads that react to new recruits.
+    for (const u of this.team) if (u && u !== placed) this.fireShopTrigger(u, 'allyBought');
     return true;
   }
 
   sell(teamIndex: number): boolean {
     const unit = this.team[teamIndex];
     if (!unit) return false;
-    this.team[teamIndex] = null;
     this.gold += sellValue(getDef(unit.defId).rarity, unit.level) + (this.fx.sellBonus ?? 0) + this.meta.sellBonus;
+    // Sell abilities fire while the squad is still in place (so 'next to it' works), then it leaves.
     this.fireShopTrigger(unit, 'sell');
+    this.team[teamIndex] = null;
     return true;
   }
 
@@ -329,49 +338,85 @@ export class Run {
   private mergeInto(target: TeamUnit, source: TeamUnit) {
     target.atk = Math.max(target.atk, source.atk) + 1;
     target.hp = Math.max(target.hp, source.hp) + MERGE_HP;
+    // Keep the bigger "grown" record so earned upgrades aren't lost by merging.
+    target.grownAtk = Math.max(target.grownAtk ?? 0, source.grownAtk ?? 0);
+    target.grownHp = Math.max(target.grownHp ?? 0, source.grownHp ?? 0);
     target.xp = Math.min(5, target.xp + source.xp + 1);
     const before = target.level;
     target.level = levelForXp(target.xp);
-    // Each evolution (level 2, level 3) adds a one-time stat jump.
+    // Each evolution (level 2, level 3) adds a one-time stat jump, then fires Evolve abilities.
     for (let lv = before + 1; lv <= target.level; lv++) {
       target.atk += EVOLVE_BONUS[lv].atk;
       target.hp += EVOLVE_BONUS[lv].hp;
+      this.fireShopTrigger(target, 'evolve');
     }
   }
 
-  private fireShopTrigger(unit: TeamUnit, trigger: 'buy' | 'sell' | 'endTurn') {
+  private fireShopTrigger(unit: TeamUnit, trigger: ShopTrigger) {
     for (const ab of getDef(unit.defId).abilities) {
       if (ab.trigger !== trigger) continue;
       for (const e of ab.effects) this.applyShopEffect(unit, e, trigger);
     }
   }
 
-  /** Shop abilities: buffs between squads and gold. Battle-only effects do nothing here. */
-  private applyShopEffect(src: TeamUnit, effect: Effect, trigger: 'buy' | 'sell' | 'endTurn') {
+  /** Permanently raise a squad's stats, remembering how much it has grown this run. */
+  private grow(u: TeamUnit, atk: number, hp: number) {
+    const before = u.atk;
+    u.atk = Math.max(0, u.atk + atk);
+    u.hp = Math.max(1, u.hp + hp);
+    u.grownAtk = (u.grownAtk ?? 0) + (u.atk - before);
+    u.grownHp = (u.grownHp ?? 0) + hp;
+  }
+
+  /** Shop abilities: permanent buffs between squads, and gold. Battle-only effects do nothing here. */
+  private applyShopEffect(src: TeamUnit, effect: Effect, trigger: ShopTrigger) {
     const lv = src.level;
     if (effect.kind === 'gold') {
-      // End-of-turn gold would be wiped by the next turn's reset, so bank it.
+      // End-of-turn gold is banked for the next turn's income.
       if (trigger === 'endTurn') this.bankedGold += scaled(effect.amount, lv);
       else this.gold += scaled(effect.amount, lv);
       return;
     }
-    if (effect.kind !== 'buff') return;
+    if (effect.kind !== 'buff' && effect.kind !== 'grow') return;
+    const idx = this.team.indexOf(src);
     const others = this.team.filter((u): u is TeamUnit => !!u && u !== src);
-    const pool =
-      effect.to === 'self'
-        ? [src]
-        : effect.to === 'randomAlly'
-          ? others.length
-            ? [this.rng.pick(others)]
-            : []
-          : effect.to === 'allAllies'
-            ? others
-            : [];
-    for (const u of pool) {
-      if (effect.element && getDef(u.defId).element !== effect.element) continue;
-      u.atk = Math.max(0, u.atk + scaled(effect.atk, lv));
-      u.hp += scaled(effect.hp, lv);
+    let pool: TeamUnit[];
+    switch (effect.kind === 'grow' ? 'self' : effect.to) {
+      case 'self':
+        pool = [src];
+        break;
+      case 'randomAlly':
+        pool = this.rng.shuffled(others).slice(0, effect.kind === 'buff' ? (effect.count ?? 1) : 1);
+        break;
+      case 'allAllies':
+        pool = others;
+        break;
+      case 'adjacent':
+        pool = [this.team[idx - 1], this.team[idx + 1]].filter((u): u is TeamUnit => !!u);
+        break;
+      case 'frontAlly':
+        pool = this.team.filter((u): u is TeamUnit => !!u).slice(0, 1);
+        break;
+      default:
+        pool = [];
     }
+    for (const u of pool) {
+      if (effect.kind === 'buff' && effect.element && getDef(u.defId).element !== effect.element) continue;
+      this.grow(u, scaled(effect.atk, lv), scaled(effect.hp, lv));
+    }
+  }
+
+  /** Apply what squads earned in battle (growth abilities), mapped back to army slots. */
+  applyBattleGrowth(growth: Map<number, { atk: number; hp: number }>): { defId: string; level: number; atk: number; hp: number }[] {
+    const lineup = this.team.filter((u): u is TeamUnit => !!u);
+    const report: { defId: string; level: number; atk: number; hp: number }[] = [];
+    for (const [squad, g] of growth) {
+      const u = lineup[squad];
+      if (!u || (!g.atk && !g.hp)) continue;
+      this.grow(u, g.atk, g.hp);
+      report.push({ defId: u.defId, level: u.level, atk: g.atk, hp: g.hp });
+    }
+    return report;
   }
 
   /** Price of a creature for this run (commander discounts applied). */

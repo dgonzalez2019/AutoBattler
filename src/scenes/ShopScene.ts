@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BLEED, fitCamera } from '../ui/viewport';
-import { abilityTexts, CREATURES, getDef } from '../data/creatures';
+import { abilityTexts, CREATURES, getDef, growthType } from '../data/creatures';
 import { EVOLVE_BONUS, evolves, formName } from '../data/evolutions';
 import { ELEMENT_INFO } from '../data/elements';
 import { CLASS_INFO, TRAITS, type TraitId } from '../data/traits';
@@ -188,6 +188,20 @@ export class ShopScene extends Phaser.Scene {
         this.dyn.add(this.slotGraphic(x, TEAM_Y, isSel, isTarget, false, RARITY[getDef(unit.defId).rarity].color));
         this.dyn.add(this.makeView(x, TEAM_Y, unit, { kind: 'team', index: i }));
         this.dyn.add(this.countPill(x, TEAM_Y, unit.defId, unit.level));
+        // Permanent stats this squad has earned this run
+        if (unit.grownAtk || unit.grownHp) {
+          this.dyn.add(
+            this.add
+              .text(x - SLOT_W / 2 + 6, TEAM_Y - SLOT_H / 2 + 8, `+${unit.grownAtk ?? 0}/+${unit.grownHp ?? 0}`, {
+                fontFamily: FONT_DISPLAY,
+                fontSize: '13px',
+                color: '#ffffff',
+                backgroundColor: '#1b7a52',
+                padding: { x: 5, y: 2 },
+              })
+              .setOrigin(0, 0),
+          );
+        }
       }
     }
 
@@ -509,9 +523,26 @@ export class ShopScene extends Phaser.Scene {
     );
     y += evoText.height + 4;
     y += role.height + 10;
-    for (const line of abilityTexts(def, unit.level)) {
+    const texts = abilityTexts(def, unit.level);
+    for (const [k, line] of texts.entries()) {
       const i = line.indexOf(':');
       const head = add(this.add.text(-128, y, line.slice(0, i).toUpperCase(), style(12, '#ffd166', true, 'left')).setOrigin(0, 0));
+      // Tag abilities that earn permanent upgrades, by how they earn them.
+      const kind = growthType(def.abilities[k]);
+      if (kind) {
+        add(
+          this.add
+            .text(-128 + head.width + 8, y - 1, `PERMANENT · ${kind.toUpperCase()}`, {
+              fontFamily: FONT_BODY,
+              fontSize: '10px',
+              fontStyle: 'bold',
+              color: '#10131f',
+              backgroundColor: kind === 'Shop' ? '#ffd166' : kind === 'Battle' ? '#ef476f' : '#06d6a0',
+              padding: { x: 5, y: 1 },
+            })
+            .setOrigin(0, 0),
+        );
+      }
       const body = add(this.add.text(-128, y + head.height + 1, cap(line.slice(i + 1).trim()), style(15, '#ffffff', false, 'left')).setOrigin(0, 0));
       y += head.height + body.height + 10;
     }

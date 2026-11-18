@@ -13,7 +13,15 @@ export type Trigger =
   | 'timer'
   | 'buy'
   | 'sell'
-  | 'endTurn';
+  | 'endTurn'
+  /** Shop: at the start of each shop turn. */
+  | 'startTurn'
+  /** Shop: when you buy a different creature. */
+  | 'allyBought'
+  /** Shop: when this creature evolves (reaches level 2 or 3). */
+  | 'evolve'
+  /** Battle: at the end of a battle your army won, if this creature is alive. */
+  | 'battleWon';
 
 /**
  * Who an effect lands on.
@@ -35,7 +43,11 @@ export type Target =
   | 'randomAlly'
   | 'lowestAlly'
   | 'allAllies'
-  | 'squad';
+  | 'squad'
+  /** Shop: the squads directly in front of and behind this one. */
+  | 'adjacent'
+  /** Shop: your front squad. */
+  | 'frontAlly';
 
 export type Effect =
   | { kind: 'damage'; to: Target; amount: number; count?: number }
@@ -48,7 +60,12 @@ export type Effect =
   /** Shop only. On end turn the gold is banked for next turn; otherwise it's immediate. */
   | { kind: 'gold'; amount: number }
   /** Faint only: come back once at a share of max health. */
-  | { kind: 'rebirth'; hpPct: number };
+  | { kind: 'rebirth'; hpPct: number }
+  /**
+   * Battle growth: this creature's squad PERMANENTLY gains these stats for the
+   * rest of the run (at most GROW_CAP times per squad per battle).
+   */
+  | { kind: 'grow'; atk: number; hp: number };
 
 export interface Ability {
   trigger: Trigger;
@@ -90,6 +107,7 @@ const list: CreatureDef[] = [
     role: 'Opens fights by setting the enemy ablaze.',
     abilities: [
       { trigger: 'startOfBattle', effects: [{ kind: 'burn', to: 'randomEnemy', stacks: 1, count: 2 }], text: 'Start of battle: apply {1} Burn to 2 random enemies.' },
+      { trigger: 'sell', effects: [{ kind: 'buff', to: 'adjacent', atk: 1, hp: 0 }], text: 'Sell: give the squads next to it +{1} attack permanently.' },
     ],
     look: 'tiny fox-like critter with a crackling plasma tail and static-charged fur',
   },
@@ -98,6 +116,7 @@ const list: CreatureDef[] = [
     role: 'Each loss makes the rest of its squad stronger.',
     abilities: [
       { trigger: 'faint', effects: [{ kind: 'buff', to: 'squad', atk: 1, hp: 2 }], text: 'Faint: its squad-mates gain +{1}/+{2}.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 1, element: 'bio' }], text: 'Evolve: give your Bio squads +{1}/+{1} permanently.' },
     ],
     look: 'round mossy seed creature with leaf ears and a sprouting tuft',
   },
@@ -106,6 +125,7 @@ const list: CreatureDef[] = [
     role: 'Cheap frontline that slows whoever hits it.',
     abilities: [
       { trigger: 'hurt', effects: [{ kind: 'chill', to: 'target', seconds: 1 }], text: 'Hurt: Chill the attacker for 1s.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 0, hp: 2, element: 'cryo' }], text: 'Evolve: give your Cryo squads +{2} health permanently.' },
     ],
     look: 'small penguin-like creature with an ice crystal crest and frosty breath',
   },
@@ -115,6 +135,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'buy', effects: [{ kind: 'buff', to: 'randomAlly', atk: 1, hp: 2 }], text: 'Buy: give a random squad +{1}/+{2}.' },
       { trigger: 'faint', effects: [{ kind: 'summon', token: 'microbot', atk: 1, hp: 3 }], text: 'Faint: build a {1}/{3} Microbot.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 1, element: 'mech' }], text: 'Evolve: give your Mech squads +{1}/+{1} permanently.' },
     ],
     look: 'robotic beetle with glowing bolt antennae and a copper shell',
   },
@@ -123,6 +144,7 @@ const list: CreatureDef[] = [
     role: 'Glass cannon that refuses to stay dead.',
     abilities: [
       { trigger: 'faint', effects: [{ kind: 'summon', token: 'voidspawn', atk: 1, hp: 3 }], text: 'Faint: a {1}/{3} Voidspawn crawls out.' },
+      { trigger: 'battleWon', effects: [{ kind: 'grow', atk: 1, hp: 1 }], text: 'Battle won: permanently gain +{1}/+{1}.' },
     ],
     look: 'shadowy mite with a single starry eye and tiny claws',
   },
@@ -132,6 +154,7 @@ const list: CreatureDef[] = [
     role: 'Periodic chain lightning that softens whole groups.',
     abilities: [
       { trigger: 'timer', every: 3, effects: [{ kind: 'damage', to: 'randomEnemy', amount: 2, count: 3 }], text: 'Every 3s: chain lightning hits 3 random enemies for {2}.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'adjacent', atk: 1, hp: 2 }], text: 'Evolve: give the squads next to it +{1}/+{2} permanently.' },
     ],
     look: 'floating orb creature with orbiting electric rings',
   },
@@ -140,6 +163,7 @@ const list: CreatureDef[] = [
     role: 'Punishes melee attackers.',
     abilities: [
       { trigger: 'hurt', effects: [{ kind: 'damage', to: 'target', amount: 1 }], text: 'Hurt: deal {1} damage back to the attacker.' },
+      { trigger: 'battleWon', effects: [{ kind: 'grow', atk: 0, hp: 3 }], text: 'Battle won: permanently gain +{3} health.' },
     ],
     look: 'armadillo-like creature covered in thorny vines',
   },
@@ -149,6 +173,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'beforeAttack', effects: [{ kind: 'chill', to: 'target', seconds: 1.5 }], text: 'Attack: Chill the target for 1.5s.' },
       { trigger: 'startOfBattle', effects: [{ kind: 'buff', to: 'nearestEnemy', atk: -1, hp: 0 }], text: 'Start of battle: the nearest enemy loses {1} attack.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 3 }], text: 'Evolve: permanently gain +{1}/+{3}.' },
     ],
     look: 'shark-jawed lizard breathing frost',
   },
@@ -158,6 +183,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'endTurn', effects: [{ kind: 'buff', to: 'self', atk: 0, hp: 1 }], text: 'End turn: permanently gain +{1} health.' },
       { trigger: 'kill', effects: [{ kind: 'shield', to: 'self', amount: 3 }], text: 'Kill: gain a {3} Shield.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 0, hp: 2 }], text: 'Kill: permanently gain +{2} health.' },
     ],
     look: 'loyal robot dog with gear-shaped ears',
   },
@@ -166,6 +192,7 @@ const list: CreatureDef[] = [
     role: 'Its death curse finishes off the weakest enemy.',
     abilities: [
       { trigger: 'faint', effects: [{ kind: 'damage', to: 'lowestEnemy', amount: 4 }], text: 'Faint: deal {4} damage to the lowest-health enemy.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 0, element: 'void' }], text: 'Evolve: give your Void squads +{1} attack permanently.' },
     ],
     look: 'ghostly wisp creature with a cosmic cloak',
   },
@@ -175,6 +202,7 @@ const list: CreatureDef[] = [
     role: 'Snowballs on kills and spreads fire.',
     abilities: [
       { trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 2, hp: 0 }, { kind: 'burn', to: 'aroundTarget', stacks: 1 }], text: 'Kill: gain +{2} attack and apply {1} Burn to enemies around the victim.' },
+      { trigger: 'battleWon', effects: [{ kind: 'grow', atk: 1, hp: 1 }], text: 'Battle won: permanently gain +{1}/+{1}.' },
     ],
     look: 'sleek raptor with a burning solar-flare crest',
   },
@@ -184,6 +212,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'startOfBattle', effects: [{ kind: 'buff', to: 'allAllies', atk: 0, hp: 2 }], text: 'Start of battle: your whole army gains +{2} health.' },
       { trigger: 'timer', every: 5, effects: [{ kind: 'heal', to: 'lowestAlly', amount: 4, count: 3 }], text: 'Every 5s: heal the 3 most injured allies for {4}.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 0, hp: 2 }], text: 'Evolve: give every squad +{2} health permanently.' },
     ],
     look: 'gentle bull-like giant with a tree growing from its back',
   },
@@ -192,6 +221,7 @@ const list: CreatureDef[] = [
     role: 'Keeps your front line alive with ice armor.',
     abilities: [
       { trigger: 'timer', every: 4, effects: [{ kind: 'shield', to: 'lowestAlly', amount: 5, count: 3 }], text: 'Every 4s: Shield the 3 most injured allies for {5}.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 0, hp: 3, element: 'cryo' }], text: 'Evolve: give your Cryo squads +{3} health permanently.' },
     ],
     look: 'majestic ice stag with glacier antlers',
   },
@@ -201,6 +231,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'startOfBattle', effects: [{ kind: 'shield', to: 'allAllies', amount: 4, element: 'mech' }], text: 'Start of battle: every Mech ally gains a {4} Shield.' },
       { trigger: 'sell', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 0 }], text: 'Sell: every squad gains +{1} attack.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 1, element: 'mech' }], text: 'Evolve: give your Mech squads +{1}/+{1} permanently.' },
     ],
     look: 'heavy mech golem with a glowing core',
   },
@@ -210,6 +241,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'beforeAttack', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Attack: gain +{1} attack.' },
       { trigger: 'kill', effects: [{ kind: 'heal', to: 'self', amount: 5 }], text: 'Kill: heal itself for {5}.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Kill: permanently gain +{1} attack.' },
     ],
     look: 'panther made of night sky with an eclipse halo',
   },
@@ -246,6 +278,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'timer', every: 4, effects: [{ kind: 'summon', token: 'sproutling', atk: 2, hp: 6 }], text: 'Every 4s: sprout a {2}/{6} Sproutling.' },
       { trigger: 'faint', effects: [{ kind: 'heal', to: 'allAllies', amount: 5 }], text: 'Faint: heal your whole army for {5}.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 2, element: 'bio' }], text: 'Evolve: give your Bio squads +{1}/+{2} permanently.' },
     ],
     look: 'ancient walking tree spirit with glowing seed pods and root legs',
   },
@@ -254,7 +287,7 @@ const list: CreatureDef[] = [
     role: 'Gravity crush hits everything near its target.',
     abilities: [
       { trigger: 'beforeAttack', effects: [{ kind: 'damage', to: 'aroundTarget', amount: 2 }], text: 'Attack: gravity crush deals {2} to enemies around the target.' },
-      { trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 3 }], text: 'Kill: gain +{1}/+{3}.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 3 }], text: 'Kill: permanently gain +{1}/+{3}.' },
     ],
     look: 'menacing black hole beast with a swirling accretion disk mane',
   },
@@ -264,19 +297,28 @@ const list: CreatureDef[] = [
   {
     id: 'emberpup', name: 'Emberpup', element: 'plasma', class: 'striker', rarity: 1, atk: 3, hp: 6, squad: 6,
     role: 'Cheap, fast biter that sets its target alight.',
-    abilities: [{ trigger: 'beforeAttack', effects: [{ kind: 'burn', to: 'target', stacks: 1 }], text: 'Attack: apply {1} Burn to the target.' }],
+    abilities: [
+      { trigger: 'beforeAttack', effects: [{ kind: 'burn', to: 'target', stacks: 1 }], text: 'Attack: apply {1} Burn to the target.' },
+      { trigger: 'battleWon', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Battle won: permanently gain +{1} attack.' },
+    ],
     look: 'scrappy puppy with a smoldering ember mane and glowing paws',
   },
   {
     id: 'cinderling', name: 'Cinderling', element: 'plasma', class: 'swarm', rarity: 1, atk: 2, hp: 6, squad: 6,
     role: 'Living embers that pop when they fall.',
-    abilities: [{ trigger: 'faint', effects: [{ kind: 'damage', to: 'aroundSelf', amount: 2 }, { kind: 'burn', to: 'aroundSelf', stacks: 1 }], text: 'Faint: explode for {2} damage and {1} Burn on nearby enemies.' }],
+    abilities: [
+      { trigger: 'faint', effects: [{ kind: 'damage', to: 'aroundSelf', amount: 2 }, { kind: 'burn', to: 'aroundSelf', stacks: 1 }], text: 'Faint: explode for {2} damage and {1} Burn on nearby enemies.' },
+      { trigger: 'startTurn', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Start of turn: permanently gain +{1} attack.' },
+    ],
     look: 'tiny round coal creature with a flickering flame on its head',
   },
   {
     id: 'pyrolisk', name: 'Pyrolisk', element: 'plasma', class: 'vanguard', rarity: 2, atk: 2, hp: 25, squad: 4,
     role: 'A burning wall: hitting it hurts.',
-    abilities: [{ trigger: 'hurt', effects: [{ kind: 'burn', to: 'target', stacks: 1 }], text: 'Hurt: apply {1} Burn to the attacker.' }],
+    abilities: [
+      { trigger: 'hurt', effects: [{ kind: 'burn', to: 'target', stacks: 1 }], text: 'Hurt: apply {1} Burn to the attacker.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 0, hp: 2, element: 'plasma' }], text: 'Evolve: give your Plasma squads +{2} health permanently.' },
+    ],
     look: 'stocky lizard with molten rock scales and a lava-crack crest',
   },
   {
@@ -307,13 +349,19 @@ const list: CreatureDef[] = [
   {
     id: 'rivetrat', name: 'Rivetrat', element: 'mech', class: 'striker', rarity: 1, atk: 3, hp: 6, squad: 6,
     role: 'Scrappy brawler that grows with every kill.',
-    abilities: [{ trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 2 }], text: 'Kill: gain +{1}/+{2}.' }],
+    abilities: [
+      { trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 2 }], text: 'Kill: gain +{1}/+{2}.' },
+      { trigger: 'allyBought', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Ally bought: permanently gain +{1} attack.' },
+    ],
     look: 'mechanical rat with rivet-studded armor and a buzzsaw tail',
   },
   {
     id: 'railhawk', name: 'Railhawk', element: 'mech', class: 'gunner', rarity: 2, atk: 4, hp: 12, squad: 4, ranged: true,
     role: 'Snipes the weakest enemy from the back.',
-    abilities: [{ trigger: 'timer', every: 4, effects: [{ kind: 'damage', to: 'lowestEnemy', amount: 4 }], text: 'Every 4s: railgun the lowest-health enemy for {4}.' }],
+    abilities: [
+      { trigger: 'timer', every: 4, effects: [{ kind: 'damage', to: 'lowestEnemy', amount: 4 }], text: 'Every 4s: railgun the lowest-health enemy for {4}.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'self', atk: 2, hp: 0 }], text: 'Evolve: permanently gain +{2} attack.' },
+    ],
     look: 'robotic hawk with a long railgun beak and steel feather blades',
   },
   {
@@ -335,19 +383,28 @@ const list: CreatureDef[] = [
   {
     id: 'snowmite', name: 'Snowmite', element: 'cryo', class: 'swarm', rarity: 1, atk: 2, hp: 9, squad: 6,
     role: 'Bursts into a slowing frost cloud.',
-    abilities: [{ trigger: 'faint', effects: [{ kind: 'chill', to: 'aroundSelf', seconds: 2 }], text: 'Faint: Chill nearby enemies for 2s.' }],
+    abilities: [
+      { trigger: 'faint', effects: [{ kind: 'chill', to: 'aroundSelf', seconds: 2 }], text: 'Faint: Chill nearby enemies for 2s.' },
+      { trigger: 'buy', effects: [{ kind: 'buff', to: 'frontAlly', atk: 0, hp: 3 }], text: 'Buy: give your front squad +{3} health permanently.' },
+    ],
     look: 'fluffy snowball mite with tiny icicle legs',
   },
   {
     id: 'shardcub', name: 'Shardcub', element: 'cryo', class: 'striker', rarity: 1, atk: 3, hp: 9, squad: 6,
     role: 'Every bite slows its prey.',
-    abilities: [{ trigger: 'beforeAttack', effects: [{ kind: 'chill', to: 'target', seconds: 1 }], text: 'Attack: Chill the target for 1s.' }],
+    abilities: [
+      { trigger: 'beforeAttack', effects: [{ kind: 'chill', to: 'target', seconds: 1 }], text: 'Attack: Chill the target for 1s.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Kill: permanently gain +{1} attack.' },
+    ],
     look: 'playful bear cub with crystal ice shards growing from its shoulders',
   },
   {
     id: 'blizzowl', name: 'Blizzowl', element: 'cryo', class: 'mystic', rarity: 2, atk: 2, hp: 24, squad: 4, ranged: true,
     role: 'Calls down blizzards on the enemy army.',
-    abilities: [{ trigger: 'timer', every: 4, effects: [{ kind: 'chill', to: 'randomEnemy', seconds: 2, count: 3 }, { kind: 'damage', to: 'randomEnemy', amount: 1, count: 3 }], text: 'Every 4s: blizzard Chills 3 random enemies for 2s and hits 3 for {1}.' }],
+    abilities: [
+      { trigger: 'timer', every: 4, effects: [{ kind: 'chill', to: 'randomEnemy', seconds: 2, count: 3 }, { kind: 'damage', to: 'randomEnemy', amount: 1, count: 3 }], text: 'Every 4s: blizzard Chills 3 random enemies for 2s and hits 3 for {1}.' },
+      { trigger: 'startTurn', effects: [{ kind: 'buff', to: 'adjacent', atk: 1, hp: 0 }], text: 'Start of turn: give the squads next to it +{1} attack permanently.' },
+    ],
     look: 'snowy owl with frost-crystal feathers and glowing blue eyes',
   },
   {
@@ -355,7 +412,7 @@ const list: CreatureDef[] = [
     role: 'Apex hunter that grows on kills.',
     abilities: [
       { trigger: 'beforeAttack', effects: [{ kind: 'chill', to: 'target', seconds: 1 }], text: 'Attack: Chill the target for 1s.' },
-      { trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 3 }], text: 'Kill: gain +{1}/+{3}.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 3 }], text: 'Kill: permanently gain +{1}/+{3}.' },
     ],
     look: 'sleek saber-toothed ice wolf with frozen fangs and a frost mane',
   },
@@ -372,25 +429,34 @@ const list: CreatureDef[] = [
   {
     id: 'pollenpuff', name: 'Pollenpuff', element: 'bio', class: 'gunner', rarity: 1, atk: 2, hp: 9, squad: 6, ranged: true,
     role: 'Healing spores with every shot.',
-    abilities: [{ trigger: 'beforeAttack', effects: [{ kind: 'heal', to: 'lowestAlly', amount: 1 }], text: 'Attack: heal the most injured ally for {1}.' }],
+    abilities: [
+      { trigger: 'beforeAttack', effects: [{ kind: 'heal', to: 'lowestAlly', amount: 1 }], text: 'Attack: heal the most injured ally for {1}.' },
+      { trigger: 'endTurn', effects: [{ kind: 'buff', to: 'adjacent', atk: 0, hp: 1 }], text: 'End turn: give the squads next to it +{1} health permanently.' },
+    ],
     look: 'fluffy dandelion puffball creature with big sleepy eyes',
   },
   {
     id: 'vinesnap', name: 'Vinesnap', element: 'bio', class: 'striker', rarity: 1, atk: 2, hp: 9, squad: 6,
     role: 'Gets angrier the more it is hit.',
-    abilities: [{ trigger: 'hurt', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Hurt: gain +{1} attack.' }],
+    abilities: [
+      { trigger: 'hurt', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Hurt: gain +{1} attack.' },
+      { trigger: 'battleWon', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Battle won: permanently gain +{1} attack.' },
+    ],
     look: 'venus flytrap creature with snapping jaws and leafy legs',
   },
   {
     id: 'sapsprite', name: 'Sapsprite', element: 'bio', class: 'mystic', rarity: 2, atk: 2, hp: 17, squad: 4, ranged: true,
     role: 'Steady group healing.',
-    abilities: [{ trigger: 'timer', every: 4, effects: [{ kind: 'heal', to: 'lowestAlly', amount: 3, count: 4 }], text: 'Every 4s: heal the 4 most injured allies for {3}.' }],
+    abilities: [
+      { trigger: 'timer', every: 4, effects: [{ kind: 'heal', to: 'lowestAlly', amount: 3, count: 4 }], text: 'Every 4s: heal the 4 most injured allies for {3}.' },
+      { trigger: 'endTurn', effects: [{ kind: 'buff', to: 'randomAlly', atk: 0, hp: 2, count: 2 }], text: 'End turn: give 2 random squads +{2} health permanently.' },
+    ],
     look: 'small glowing forest fairy made of amber tree sap and leaves',
   },
   {
     id: 'mantidra', name: 'Mantidra', element: 'bio', class: 'striker', rarity: 3, atk: 8, hp: 18, squad: 3,
     role: 'Duelist that feeds on its kills.',
-    abilities: [{ trigger: 'kill', effects: [{ kind: 'heal', to: 'self', amount: 8 }, { kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Kill: heal itself for {8} and gain +{1} attack.' }],
+    abilities: [{ trigger: 'kill', effects: [{ kind: 'heal', to: 'self', amount: 8 }, { kind: 'grow', atk: 1, hp: 0 }], text: 'Kill: heal itself for {8} and permanently gain +{1} attack.' }],
     look: 'fierce green mantis warrior with scythe arms and leaf-blade wings',
   },
   {
@@ -406,13 +472,19 @@ const list: CreatureDef[] = [
   {
     id: 'gloomwisp', name: 'Gloomwisp', element: 'void', class: 'mystic', rarity: 1, atk: 2, hp: 6, squad: 6, ranged: true,
     role: 'Weakens the enemy before the fight.',
-    abilities: [{ trigger: 'startOfBattle', effects: [{ kind: 'buff', to: 'randomEnemy', atk: -1, hp: 0, count: 2 }], text: 'Start of battle: 2 random enemies lose {1} attack.' }],
+    abilities: [
+      { trigger: 'startOfBattle', effects: [{ kind: 'buff', to: 'randomEnemy', atk: -1, hp: 0, count: 2 }], text: 'Start of battle: 2 random enemies lose {1} attack.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 0, element: 'void' }], text: 'Evolve: give your Void squads +{1} attack permanently.' },
+    ],
     look: 'small floating shadow wisp with a lantern-like violet glow',
   },
   {
     id: 'shadeling', name: 'Shadeling', element: 'void', class: 'swarm', rarity: 1, atk: 2, hp: 9, squad: 6,
     role: 'Grows stronger as allies fall.',
-    abilities: [{ trigger: 'allyFaint', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Ally faint: gain +{1} attack.' }],
+    abilities: [
+      { trigger: 'allyFaint', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 0 }], text: 'Ally faint: gain +{1} attack.' },
+      { trigger: 'sell', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 0, element: 'void' }], text: 'Sell: give your Void squads +{1} attack permanently.' },
+    ],
     look: 'little shadow imp with glowing purple eyes and wispy smoke tail',
   },
   {
@@ -421,6 +493,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'startOfBattle', effects: [{ kind: 'shield', to: 'self', amount: 6 }], text: 'Start of battle: gain a {6} Shield.' },
       { trigger: 'faint', effects: [{ kind: 'damage', to: 'aroundSelf', amount: 3 }], text: 'Faint: rift collapse deals {3} to nearby enemies.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'adjacent', atk: 0, hp: 3 }], text: 'Evolve: give the squads next to it +{3} health permanently.' },
     ],
     look: 'armored void knight creature with a cracked portal for a chest',
   },
@@ -445,7 +518,10 @@ const list: CreatureDef[] = [
   {
     id: 'flarefly', name: 'Flarefly', element: 'plasma', class: 'gunner', rarity: 1, unlock: 2, atk: 2, hp: 9, squad: 6, ranged: true,
     role: 'Keeps a steady trickle of Burn on the enemy.',
-    abilities: [{ trigger: 'timer', every: 3, effects: [{ kind: 'burn', to: 'randomEnemy', stacks: 1 }], text: 'Every 3s: drop {1} Burn on a random enemy.' }],
+    abilities: [
+      { trigger: 'timer', every: 3, effects: [{ kind: 'burn', to: 'randomEnemy', stacks: 1 }], text: 'Every 3s: drop {1} Burn on a random enemy.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'allAllies', atk: 1, hp: 0, element: 'plasma' }], text: 'Evolve: give your Plasma squads +{1} attack permanently.' },
+    ],
     look: 'glowing firefly creature with ember wings and a bright plasma tail-light',
   },
   {
@@ -491,13 +567,19 @@ const list: CreatureDef[] = [
   {
     id: 'ticktock', name: 'Ticktock', element: 'mech', class: 'mystic', rarity: 1, unlock: 4, atk: 2, hp: 9, squad: 6, ranged: true,
     role: 'Clockwork shield generator.',
-    abilities: [{ trigger: 'timer', every: 4, effects: [{ kind: 'shield', to: 'lowestAlly', amount: 3, count: 2 }], text: 'Every 4s: Shield the 2 most injured allies for {3}.' }],
+    abilities: [
+      { trigger: 'timer', every: 4, effects: [{ kind: 'shield', to: 'lowestAlly', amount: 3, count: 2 }], text: 'Every 4s: Shield the 2 most injured allies for {3}.' },
+      { trigger: 'endTurn', effects: [{ kind: 'buff', to: 'randomAlly', atk: 0, hp: 1, count: 2 }], text: 'End turn: give 2 random squads +{1} health permanently.' },
+    ],
     look: 'small clockwork owl robot with a ticking gear chest and brass feathers',
   },
   {
     id: 'hammerhead', name: 'Hammerhead', element: 'mech', class: 'striker', rarity: 2, unlock: 6, atk: 5, hp: 14, squad: 4,
     role: 'Every swing hits twice.',
-    abilities: [{ trigger: 'beforeAttack', effects: [{ kind: 'damage', to: 'target', amount: 2 }], text: 'Attack: deal {2} extra damage to the target.' }],
+    abilities: [
+      { trigger: 'beforeAttack', effects: [{ kind: 'damage', to: 'target', amount: 2 }], text: 'Attack: deal {2} extra damage to the target.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Kill: permanently gain +{1} attack.' },
+    ],
     look: 'robotic hammerhead shark on mechanical legs with piston-powered jaws',
   },
   {
@@ -543,6 +625,7 @@ const list: CreatureDef[] = [
     abilities: [
       { trigger: 'startOfBattle', effects: [{ kind: 'shield', to: 'self', amount: 6 }], text: 'Start of battle: gain a {6} Shield.' },
       { trigger: 'hurt', effects: [{ kind: 'chill', to: 'target', seconds: 1 }], text: 'Hurt: Chill the attacker for 1s.' },
+      { trigger: 'evolve', effects: [{ kind: 'buff', to: 'frontAlly', atk: 0, hp: 4 }], text: 'Evolve: give your front squad +{4} health permanently.' },
     ],
     look: 'woolly musk-ox beast covered in thick frost and icicle horns',
   },
@@ -557,7 +640,7 @@ const list: CreatureDef[] = [
     role: 'Frozen executioner.',
     abilities: [
       { trigger: 'beforeAttack', effects: [{ kind: 'chill', to: 'target', seconds: 1.5 }], text: 'Attack: Chill the target for 1.5s.' },
-      { trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 2, hp: 0 }], text: 'Kill: gain +{2} attack.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Kill: permanently gain +{1} attack.' },
     ],
     look: 'armored ice knight beast with glacier blades for arms and a frozen crown',
   },
@@ -574,7 +657,10 @@ const list: CreatureDef[] = [
   {
     id: 'budling', name: 'Budling', element: 'bio', class: 'swarm', rarity: 1, unlock: 9, atk: 1, hp: 9, squad: 6,
     role: 'Blooms into a Sproutling when it falls.',
-    abilities: [{ trigger: 'faint', effects: [{ kind: 'summon', token: 'sproutling', atk: 2, hp: 6 }], text: 'Faint: a {2}/{6} Sproutling grows in its place.' }],
+    abilities: [
+      { trigger: 'faint', effects: [{ kind: 'summon', token: 'sproutling', atk: 2, hp: 6 }], text: 'Faint: a {2}/{6} Sproutling grows in its place.' },
+      { trigger: 'allyBought', effects: [{ kind: 'buff', to: 'self', atk: 0, hp: 1 }], text: 'Ally bought: permanently gain +{1} health.' },
+    ],
     look: 'tiny flower bud creature with petal ears and a leaf skirt',
   },
   {
@@ -626,13 +712,16 @@ const list: CreatureDef[] = [
   {
     id: 'leechling', name: 'Leechling', element: 'void', class: 'striker', rarity: 1, unlock: 12, atk: 3, hp: 6, squad: 6,
     role: 'Feeds and grows on every kill.',
-    abilities: [{ trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 1, hp: 3 }], text: 'Kill: gain +{1}/+{3}.' }],
+    abilities: [{ trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 2 }], text: 'Kill: permanently gain +{1}/+{2}.' }],
     look: 'slimy void leech creature with a round toothy mouth and starry skin',
   },
   {
     id: 'phantasm', name: 'Phantasm', element: 'void', class: 'striker', rarity: 2, unlock: 8, atk: 6, hp: 12, squad: 4,
     role: 'Assassin that opens on the weakest enemy.',
-    abilities: [{ trigger: 'startOfBattle', effects: [{ kind: 'damage', to: 'lowestEnemy', amount: 4 }], text: 'Start of battle: strike the lowest-health enemy for {4}.' }],
+    abilities: [
+      { trigger: 'startOfBattle', effects: [{ kind: 'damage', to: 'lowestEnemy', amount: 4 }], text: 'Start of battle: strike the lowest-health enemy for {4}.' },
+      { trigger: 'battleWon', effects: [{ kind: 'grow', atk: 1, hp: 0 }], text: 'Battle won: permanently gain +{1} attack.' },
+    ],
     look: 'translucent phantom assassin with void daggers and a tattered shadow cloak',
   },
   {
@@ -655,7 +744,7 @@ const list: CreatureDef[] = [
     role: 'LEGENDARY. Erases everything around its target.',
     abilities: [
       { trigger: 'beforeAttack', effects: [{ kind: 'damage', to: 'aroundTarget', amount: 4 }], text: 'Attack: erase {4} from enemies around the target.' },
-      { trigger: 'kill', effects: [{ kind: 'buff', to: 'self', atk: 2, hp: 8 }], text: 'Kill: gain +{2}/+{8}.' },
+      { trigger: 'kill', effects: [{ kind: 'grow', atk: 1, hp: 4 }], text: 'Kill: permanently gain +{1}/+{4}.' },
     ],
     look: 'terrifying void dragon with an event-horizon maw and wings of pure darkness',
   },
@@ -676,6 +765,17 @@ export function getDef(id: string): CreatureDef {
   const def = CREATURES[id];
   if (!def) throw new Error(`Unknown creature: ${id}`);
   return def;
+}
+
+/** Triggers that fire while shopping: their buffs are permanent. */
+export const SHOP_TRIGGERS: Trigger[] = ['buy', 'sell', 'endTurn', 'startTurn', 'allyBought', 'evolve'];
+
+/** How an ability earns permanent upgrades, if it does: Shop, Battle (growth) or Evolve. */
+export function growthType(a: Ability): 'Shop' | 'Battle' | 'Evolve' | null {
+  if (a.trigger === 'evolve') return 'Evolve';
+  if (a.effects.some((e) => e.kind === 'grow')) return 'Battle';
+  if (SHOP_TRIGGERS.includes(a.trigger) && a.effects.some((e) => e.kind === 'buff')) return 'Shop';
+  return null;
 }
 
 /** Scale an ability number by level (level 1 = base). */

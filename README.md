@@ -27,7 +27,7 @@ npm run build    # production build into dist/
 
 - **Squads:** each shop purchase is a squad. Your army has 5 squad slots, and the front slot deploys closest to the enemy.
 - **Economy:** gold carries over between turns.
-  - Each turn you earn **base income** (10 on round 1, then 7 rising to 10 by round 8) plus **interest**: +1 for every 5 gold you saved, up to +3.
+  - Each turn you earn **10 gold** plus **interest**: +1 for every 5 gold you saved, up to +3.
   - Winning a battle pays +1.
   - Some commanders, permanent upgrades and economy creatures add more.
   - The shop shows what next turn will pay and how much more you need to save for the next interest step.
@@ -35,6 +35,10 @@ npm run build    # production build into dist/
   - The shop has 3 slots at first, 4 from round 3 and 5 from round 7.
   - Odds shift toward rarer creatures each round. Round 1 is all Commons; by round 11 it's 20 / 25 / 30 / 18 / 7%. See `src/data/rarity.ts`.
 - **Merging:** drop a duplicate squad onto its twin. Each merge gives +1 attack and +2 health per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. Ability numbers multiply by level.
+- **Earning permanent upgrades in a run:** many creatures grow their own or other squads' stats for the rest of the run. A green +attack/+health pill on each army card shows what a squad has earned, and each ability is tagged by how it earns:
+  - **Shop:** when bought or sold, at start or end of turn, or when you recruit another squad. Example: Cinderling gains +1 attack every turn.
+  - **Battle:** on kills or when your army wins. Kept even if you lose, up to 2 times per squad per battle. Example: Shardcub, Kill: permanently +1 attack.
+  - **Evolve:** when the creature reaches level 2 or 3. Example: Bryobit evolving gives every Bio squad +1/+1.
 - **Battle:** both armies charge across a real-time battlefield. Abilities trigger on start of battle, attack, hurt, faint, kill or a timer ("every 4s"). Some trigger in the shop instead: on buy, sell or end of turn.
 - **Winning and Endless Mode:** reaching 10 wins ends the game as a victory, with your rewards banked on the spot. You can then optionally carry on with the same army in Endless Mode.
   - Endless is a bonus mode with a hard cap at round 50, which is not meant to be reached.

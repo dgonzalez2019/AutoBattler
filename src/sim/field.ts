@@ -35,6 +35,8 @@ const COL_GAP = 26;
 const ROW_GAP = 52;
 const MAX_ROWS = 8;
 const BURN_TICK = 1;
+/** Max battle-growth events per squad per battle. */
+export const GROW_CAP = 2;
 
 // ── Synergy numbers (player-facing text lives in data/traits.ts) ──
 const CHILL_SLOW = [0.3, 0.4, 0.55];
@@ -115,7 +117,9 @@ export type FieldEvent =
   | { t: 'heal'; id: number; amount: number }
   | { t: 'shield'; id: number; amount: number }
   | { t: 'shieldBreak'; id: number }
-  | { t: 'status'; id: number; kind: 'burn' | 'chill' };
+  | { t: 'status'; id: number; kind: 'burn' | 'chill' }
+  /** A squad permanently grew (kept after the battle). */
+  | { t: 'grow'; id: number; atk: number; hp: number };
 
 interface PendingHit {
   targetId: number;
@@ -143,6 +147,14 @@ export class FieldBattle {
   private depth = 0;
   /** Hits landing this tick. Resolved together so simultaneous blows both connect. */
   private pending: PendingHit[] = [];
+  /**
+   * Battle growth per side and squad index: permanent stats the squad keeps
+   * after this battle (applied to the team by the run), with how many times it grew.
+   */
+  readonly growth: [Map<number, { atk: number; hp: number; times: number }>, Map<number, { atk: number; hp: number; times: number }>] = [
+    new Map(),
+    new Map(),
+  ];
   /** Melee attackers per target, counted at the start of each tick (order-independent). */
   private engaged = new Map<number, number>();
 
@@ -470,7 +482,12 @@ export class FieldBattle {
     if (this.result) return;
     const a = this.aliveCount(0);
     const b = this.aliveCount(1);
-    if (!a || !b) this.result = a ? 'win' : b ? 'lose' : 'draw';
+    if (!a || !b) {
+      this.result = a ? 'win' : b ? 'lose' : 'draw';
+      // Survivors of the winning army trigger their "Battle won" abilities.
+      const winner: Side | null = this.result === 'win' ? 0 : this.result === 'lose' ? 1 : null;
+      if (winner !== null) for (const u of this.units) if (u.alive && u.side === winner) this.trigger(u, 'battleWon');
+    }
     else if (this.time >= TIME_LIMIT) this.result = 'draw';
   }
 
@@ -656,6 +673,10 @@ export class FieldBattle {
         return allies();
       case 'squad':
         return allies().filter((o) => o !== src && o.squad === src.squad && !o.token);
+      case 'adjacent':
+        return allies().filter((o) => !o.token && Math.abs(o.squad - src.squad) === 1);
+      case 'frontAlly':
+        return allies().filter((o) => !o.token && o.squad === 0);
     }
   }
 
@@ -704,6 +725,18 @@ export class FieldBattle {
         const r = this.spawn(src.side, src.defId, src.level, src.squad, src.x, src.y, src.atk, Math.max(1, Math.round(src.maxHp * effect.hpPct)));
         r.reborn = true;
         this.events.push({ t: 'spawn', id: r.id });
+        break;
+      }
+      case 'grow': {
+        // Permanent growth for this creature's squad, capped per battle.
+        if (src.token) break;
+        const g = this.growth[src.side].get(src.squad) ?? { atk: 0, hp: 0, times: 0 };
+        if (g.times >= GROW_CAP) break;
+        g.times++;
+        g.atk += scaled(effect.atk, lv);
+        g.hp += scaled(effect.hp, lv);
+        this.growth[src.side].set(src.squad, g);
+        this.events.push({ t: 'grow', id: src.id, atk: scaled(effect.atk, lv), hp: scaled(effect.hp, lv) });
         break;
       }
       case 'gold':
