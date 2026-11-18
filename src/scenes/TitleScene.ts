@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { artScale, creatureKey } from '../art/creatureArt';
+import { onlineEnabled } from '../config';
+import { playerName, setPlayerName } from '../game/player';
 import { Run, WINS_TO_VICTORY } from '../game/run';
 import { FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
 import { button, drawBackground } from '../ui/widgets';
@@ -30,6 +32,26 @@ export class TitleScene extends Phaser.Scene {
         fontSize: '24px',
         fontStyle: 'bold',
         color: '#9aa3c7',
+      })
+      .setOrigin(0.5);
+
+    // Commander name + matchmaking mode
+    const nameText = this.add
+      .text(W / 2, H - 182, '', { fontFamily: FONT_BODY, fontSize: '20px', fontStyle: 'bold', color: '#e8ecff' })
+      .setOrigin(0.5);
+    const showName = () => nameText.setText(`Commander: ${playerName()}   (tap to rename)`);
+    showName();
+    nameText.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      const next = window.prompt('Commander name (shown to opponents):', playerName());
+      if (next !== null) setPlayerName(next);
+      showName();
+    });
+    this.add
+      .text(W / 2, H - 40, onlineEnabled() ? 'Online matchmaking: fight armies from real players' : 'Offline mode: AI opponents', {
+        fontFamily: FONT_BODY,
+        fontSize: '16px',
+        fontStyle: 'bold',
+        color: onlineEnabled() ? '#06d6a0' : '#9aa3c7',
       })
       .setOrigin(0.5);
 

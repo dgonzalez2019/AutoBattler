@@ -5,6 +5,7 @@ import { CLASS_INFO, TRAITS, type TraitId } from '../data/traits';
 import { ALL_TRAITS, computeTraits } from '../game/synergy';
 import { squadCount } from '../game/army';
 import { opponents } from '../game/matchmaking';
+import { playerName } from '../game/player';
 import { MODULES, moduleText } from '../game/mothership';
 import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, UNIT_COST, WINS_TO_VICTORY } from '../game/run';
 import { CreatureView } from '../ui/CreatureView';
@@ -467,13 +468,16 @@ export class ShopScene extends Phaser.Scene {
     }
     this.busy = true;
     this.run.endTurn();
-    const player = this.run.snapshot('You');
-    // Matchmaking: fight an army saved by someone else at this same round.
-    const enemy = await opponents.findOpponent(this.run.round, this.run.battleSeed());
-    void opponents.submit({ ...player, name: 'Past You' });
+    const player = this.run.snapshot(playerName());
+    // Matchmaking: fight an army another player saved at this same round.
+    const status = this.add
+      .text(1110, 610, 'Finding opponent...', { fontFamily: FONT_BODY, fontSize: '16px', fontStyle: 'bold', color: '#ffd166' })
+      .setOrigin(0.5);
+    const [opp] = await Promise.all([opponents.findOpponent(this.run.round, this.run.battleSeed()), opponents.submit(player)]);
+    status.destroy();
     this.cameras.main.fadeOut(250, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start('Battle', { player, enemy, seed: this.run.battleSeed() });
+      this.scene.start('Battle', { player, enemy: opp.army, kind: opp.kind, seed: this.run.battleSeed() });
     });
   }
 

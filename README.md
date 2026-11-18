@@ -22,9 +22,7 @@ npm run build    # production build into dist/
   - Armory: more attack.
   - Shield Bay: more health.
   - Reactor: more gold each turn.
-- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army saved at round N. You have 5 lives and win the run at 10 wins.
-  - The pool currently lives in your own browser and is mixed with AI-built armies (`src/game/matchmaking.ts`).
-  - Online PvP means implementing `OpponentSource` against a backend.
+- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You have 5 lives and win the run at 10 wins. See [Online matchmaking](#online-matchmaking).
 
 ### Synergies
 
@@ -77,6 +75,28 @@ OPENAI_API_KEY=sk-... npm run art -- --force    # regenerate everything
 ```
 
 The prompts are built from each creature's `look`, element and tier in `src/data/creatures.ts`. A shared style line keeps the whole roster consistent. Full-size originals are saved to `art-source/`, which git ignores.
+
+## Online matchmaking
+
+Each time you press Battle, your army is uploaded to Supabase with its round. The game then asks for a random recent army from a *different* player at the same round. It falls back to your own past armies and AI armies when nobody is available or the network is down, so the game never blocks.
+
+- **Database:** `supabase/schema.sql` creates one `armies` table and one `find_opponent()` function.
+  - With the public (anon) key, a client can only insert an army or call `find_opponent`. Reads, updates and deletes are blocked by row-level security.
+  - The function returns no player ids.
+- **Validation:** every army from the network goes through `parseArmy()` (`src/game/validate.ts`). Unknown creatures, tokens, bad levels and absurd stats are rejected, and a rejected army is replaced with an AI opponent.
+- **Versions:** `GAME_VERSION` in `src/config.ts` separates the pools. Bump it when a balance change would make old armies unfair.
+- **Identity:** players are anonymous. Each browser gets a random id, so you never match yourself, and a commander name you can change on the title screen.
+
+### Setup
+
+1. Create a free project at supabase.com.
+2. Run `supabase/schema.sql` in **SQL Editor → New query → Run**.
+3. Copy the **Project URL** and the **anon / publishable key** from **Project Settings → API**. Never use the `service_role` key.
+4. Put them in one of two places:
+   - `DEFAULT_URL` / `DEFAULT_ANON_KEY` in `src/config.ts`. The anon key is meant to be public.
+   - Repository variables `SUPABASE_URL` / `SUPABASE_ANON_KEY`, which the deploy workflow passes to the build.
+
+The title screen then shows "Online matchmaking". With no config, the game runs offline against AI.
 
 ## Deploy
 

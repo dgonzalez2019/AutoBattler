@@ -4,6 +4,7 @@ import { ELEMENT_INFO } from '../data/elements';
 import { TRAITS } from '../data/traits';
 import { ALL_TRAITS } from '../game/synergy';
 import type { ArmySnapshot } from '../game/army';
+import type { OpponentKind } from '../game/matchmaking';
 import type { Run } from '../game/run';
 import { DT, FIELD_H, FIELD_W, FieldBattle, type BattleResult, type FieldEvent, type FieldUnit } from '../sim/field';
 import { COLORS, FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
@@ -12,8 +13,15 @@ import { button, drawBackground, floatText, type Button } from '../ui/widgets';
 interface BattleInit {
   player: ArmySnapshot;
   enemy: ArmySnapshot;
+  kind?: OpponentKind;
   seed: number;
 }
+
+const KIND_LABEL: Record<OpponentKind, string> = {
+  online: 'ONLINE PLAYER',
+  ghost: 'YOUR PAST ARMY',
+  ai: 'AI COMMANDER',
+};
 
 const OX = (W - FIELD_W) / 2;
 const OY = 205;
@@ -137,16 +145,28 @@ export class BattleScene extends Phaser.Scene {
       .text(W + 400, H / 2 + 110, data.enemy.name, { fontFamily: FONT_DISPLAY, fontSize: '40px', color: '#ef476f', stroke: '#000000', strokeThickness: 6 })
       .setOrigin(0.5)
       .setDepth(981);
+    const kind = data.kind ?? 'ai';
+    const tag = this.add
+      .text(W / 2, H / 2 + 160, `${KIND_LABEL[kind]}  ·  ${data.enemy.wins} wins  ·  ${data.enemy.lives} lives`, {
+        fontFamily: FONT_BODY,
+        fontSize: '20px',
+        fontStyle: 'bold',
+        color: kind === 'online' ? '#06d6a0' : '#9aa3c7',
+      })
+      .setOrigin(0.5)
+      .setDepth(981)
+      .setAlpha(0);
+    this.tweens.add({ targets: tag, alpha: 1, delay: 250, duration: 250 });
     this.tweens.add({ targets: vs, scale: 1, duration: 350, ease: 'Back.easeOut' });
     this.tweens.add({ targets: left, x: W / 2, duration: 400, ease: 'Cubic.easeOut' });
     this.tweens.add({ targets: right, x: W / 2, duration: 400, ease: 'Cubic.easeOut' });
-    this.time.delayedCall(1300, () => {
+    this.time.delayedCall(1700, () => {
       this.tweens.add({
-        targets: [shade, vs, left, right],
+        targets: [shade, vs, left, right, tag],
         alpha: 0,
         duration: 250,
         onComplete: () => {
-          [shade, vs, left, right].forEach((o) => o.destroy());
+          [shade, vs, left, right, tag].forEach((o) => o.destroy());
           this.running = true;
           this.drainEvents(); // start-of-battle abilities
         },
