@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ART_SIZE, creatureKey } from '../art/creatureArt';
+import { artScale, creatureKey } from '../art/creatureArt';
 import { ELEMENT_INFO } from '../data/elements';
 import { TRAITS } from '../data/traits';
 import { ALL_TRAITS } from '../game/synergy';
@@ -155,8 +155,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private addSprite(u: FieldUnit, pop: boolean) {
-    const size = u.radius * 3.6;
-    const baseScale = size / ART_SIZE;
+    const size = u.radius * 4.5;
+    const baseScale = artScale(this, u.defId, size);
     const img = this.add.image(OX + u.x, OY + u.y, creatureKey(u.defId)).setScale(baseScale).setFlipX(u.side === 1);
     this.sprites.set(u.id, { img, baseScale, lunge: 0, lungeX: 0, lungeY: 0 });
     if (pop) {

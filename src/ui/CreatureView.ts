@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { creatureKey, ART_SIZE } from '../art/creatureArt';
+import { artScale, creatureKey } from '../art/creatureArt';
 import { getDef } from '../data/creatures';
 import { ELEMENT_INFO } from '../data/elements';
 import { COLORS, FONT_DISPLAY } from './theme';
@@ -30,12 +30,13 @@ export class CreatureView extends Phaser.GameObjects.Container {
     this.ring = scene.add.graphics();
     this.ring.fillStyle(color, 0.18).fillEllipse(0, size * 0.36, size * 0.9, size * 0.22);
 
-    this.art = scene.add.image(0, 0, creatureKey(def.id)).setScale(size / ART_SIZE).setFlipX(flip);
+    const scale = artScale(scene, def.id, size);
+    this.art = scene.add.image(0, 0, creatureKey(def.id)).setScale(scale).setFlipX(flip);
     // Gentle idle bob so the board feels alive.
     scene.tweens.add({
       targets: this.art,
       y: -4,
-      scaleY: (size / ART_SIZE) * 1.03,
+      scaleY: scale * 1.03,
       duration: 900 + Math.random() * 400,
       yoyo: true,
       repeat: -1,

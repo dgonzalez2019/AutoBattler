@@ -28,6 +28,17 @@ function artUrls(): Record<string, string> {
   return out;
 }
 
+const REAL_ART = new Set(Object.keys(artUrls()));
+
+/** Real art fills its frame edge to edge; placeholders leave padding. This evens them out. */
+const REAL_FILL = 0.85;
+
+/** Scale that draws a creature roughly `size` pixels tall, whatever its texture resolution. */
+export function artScale(scene: Phaser.Scene, id: string, size: number): number {
+  const src = scene.textures.get(creatureKey(id)).getSourceImage() as { width: number };
+  return (size / src.width) * (REAL_ART.has(id) ? REAL_FILL : 1);
+}
+
 /** Call from a scene's preload(). */
 export function preloadCreatureArt(scene: Phaser.Scene) {
   for (const [id, url] of Object.entries(artUrls())) scene.load.image(creatureKey(id), url);

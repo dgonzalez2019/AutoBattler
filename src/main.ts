@@ -26,7 +26,7 @@ async function start() {
     height: H,
     backgroundColor: '#0b0f1e',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    render: { antialias: true, roundPixels: false },
+    render: { antialias: true, roundPixels: false, mipmapFilter: 'LINEAR_MIPMAP_LINEAR' },
     input: { activePointers: 2 },
     scene: [BootScene, TitleScene, ShopScene, BattleScene, GameOverScene],
   });

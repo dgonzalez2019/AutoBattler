@@ -4,7 +4,7 @@
 import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import sharp from 'sharp';
 
-const MODEL = process.env.ART_MODEL ?? 'gpt-image-2';
+const MODEL = process.env.ART_MODEL ?? 'gpt-image-1.5';
 const OUT = new URL('../src/assets/creatures/', import.meta.url);
 const RAW = new URL('../art-source/', import.meta.url);
 
@@ -27,8 +27,8 @@ const STYLE = [
 async function loadCreatures() {
   // Parse the roster straight from the TypeScript source so there is one source of truth.
   const src = await readFile(new URL('../src/data/creatures.ts', import.meta.url), 'utf8');
-  const re = /id: '(\w+)', name: '(\w+)', element: '(\w+)', tier: (\d)[\s\S]*?look: '([^']*)'/g;
-  return [...src.matchAll(re)].map(([, id, name, element, tier, look]) => ({ id, name, element, tier: +tier, look }));
+  const re = /id: '(\w+)', name: '(\w+)', element: '(\w+)', class: '(\w+)', tier: (\d)[\s\S]*?look: '([^']*)'/g;
+  return [...src.matchAll(re)].map(([, id, name, element, cls, tier, look]) => ({ id, name, element, cls, tier: +tier, look }));
 }
 
 function prompt(c) {
@@ -46,21 +46,37 @@ async function generate(c) {
   if (!res.ok) throw new Error(`${c.id}: ${res.status} ${JSON.stringify(body.error ?? body)}`);
   const png = Buffer.from(body.data[0].b64_json, 'base64');
   await mkdir(RAW, { recursive: true });
-  await writeFile(new URL(`${c.id}.png`, RAW), png);
-  // Trim empty space, then fit into a square so every sprite is framed the same way.
-  const out = await sharp(png)
-    .trim({ threshold: 10 })
-    .resize(460, 460, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .extend({ top: 26, bottom: 26, left: 26, right: 26, background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .webp({ quality: 90, alphaQuality: 100 })
-    .toBuffer();
   await mkdir(OUT, { recursive: true });
-  await writeFile(new URL(`${c.id}.webp`, OUT), out);
+  await writeFile(new URL(`${c.id}.png`, RAW), png);
+  await writeFile(new URL(`${c.id}.webp`, OUT), await toSprite(png, FLIP.has(c.id)));
   console.log(`ok ${c.id}`);
+}
+
+/** Creatures the model drew facing left; mirrored so every sprite faces right. */
+const FLIP = new Set(['frostling', 'gearhound', 'mechadon']);
+
+/** Trim empty space, fit into a 256px square (high-quality downscale), mirror if needed. */
+export async function toSprite(png, flip) {
+  let img = sharp(png)
+    .trim({ threshold: 10 })
+    .resize(232, 232, { fit: 'contain', kernel: 'lanczos3', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .extend({ top: 12, bottom: 12, left: 12, right: 12, background: { r: 0, g: 0, b: 0, alpha: 0 } });
+  if (flip) img = img.flop();
+  return img.webp({ quality: 92, alphaQuality: 100 }).toBuffer();
 }
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
+if (args.includes('--reexport')) {
+  // Rebuild sprites from the saved originals in art-source/ (no API calls).
+  for (const c of await loadCreatures()) {
+    const png = await readFile(new URL(`${c.id}.png`, RAW)).catch(() => null);
+    if (!png) continue;
+    await writeFile(new URL(`${c.id}.webp`, OUT), await toSprite(png, FLIP.has(c.id)));
+    console.log(`re-exported ${c.id}`);
+  }
+  process.exit(0);
+}
 const only = args.filter((a) => !a.startsWith('--'));
 const all = await loadCreatures();
 const todo = [];

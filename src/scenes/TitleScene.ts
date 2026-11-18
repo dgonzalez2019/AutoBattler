@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { creatureKey, ART_SIZE } from '../art/creatureArt';
+import { artScale, creatureKey } from '../art/creatureArt';
 import { Run, WINS_TO_VICTORY } from '../game/run';
 import { FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
 import { button, drawBackground } from '../ui/widgets';
@@ -15,7 +15,7 @@ export class TitleScene extends Phaser.Scene {
     lineup.forEach((id, i) => {
       const x = W / 2 + (i - 2) * 170;
       const big = i === 2;
-      const img = this.add.image(x, 420, creatureKey(id)).setScale((big ? 200 : 140) / ART_SIZE);
+      const img = this.add.image(x, 420, creatureKey(id)).setScale(artScale(this, id, big ? 200 : 140));
       if (i > 2) img.setFlipX(true);
       this.tweens.add({ targets: img, y: 410, duration: 900 + i * 120, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     });
