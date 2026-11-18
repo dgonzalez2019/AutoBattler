@@ -72,7 +72,7 @@ function drawPlaceholder(scene: Phaser.Scene, def: CreatureDef, key: string) {
   const h = hash(def.id);
   const s = ART_SIZE;
   const cx = s / 2;
-  const scale = def.token ? 0.7 : 0.82 + def.tier * 0.045;
+  const scale = def.token ? 0.7 : 0.82 + def.rarity * 0.045;
   const rx = 74 * scale * (0.9 + ((h & 7) / 7) * 0.25);
   const ry = 62 * scale * (0.9 + (((h >> 3) & 7) / 7) * 0.25);
   const cy = s * 0.6;

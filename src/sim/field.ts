@@ -85,6 +85,8 @@ export interface FieldUnit {
   moveSpeed: number;
   shieldBreakAtk: number;
   timers: number[];
+  /** Already used its once-per-battle rebirth. */
+  reborn: boolean;
 }
 
 export interface Projectile {
@@ -191,7 +193,7 @@ export class FieldBattle {
       atk,
       ranged: !!def.ranged,
       range: def.ranged ? RANGED_RANGE : MELEE_RANGE,
-      radius: def.token ? 10 : 12 + def.tier * 2,
+      radius: def.token ? 10 : 12 + def.rarity * 2,
       cd: 0.3 + this.rng.next() * 0.5, // stagger the first swing
       retarget: 0,
       targetId: 0,
@@ -212,6 +214,7 @@ export class FieldBattle {
       moveSpeed: 1,
       shieldBreakAtk: 0,
       timers: def.abilities.map(() => 0),
+      reborn: false,
     };
     // Synergy bonuses
     if (u.element === 'mech' && tr.mech) {
@@ -474,6 +477,10 @@ export class FieldBattle {
     u.hp = 0;
     this.events.push({ t: 'death', id: u.id });
     this.trigger(u, 'faint');
+    // Allies that feed on deaths. Summoned tokens don't count, to avoid runaway chains.
+    if (!u.token) {
+      for (const o of this.units) if (o.alive && o.side === u.side && o !== u) this.trigger(o, 'allyFaint', u);
+    }
     // Void tier 2: fallen Void creatures rise again as Voidspawn.
     if (u.element === 'void' && !u.token && this.traits[u.side].void >= 2) {
       this.summon(u, 'voidspawn', 2, 3, 1);
@@ -525,6 +532,8 @@ export class FieldBattle {
 
   private fire(u: FieldUnit, ab: Ability, other?: FieldUnit) {
     if (this.depth > 6) return; // guard against long hurt -> hurt chains
+    // A rebirth ability (and everything bundled with it) only ever fires once.
+    if (u.reborn && ab.effects.some((e) => e.kind === 'rebirth')) return;
     this.depth++;
     this.events.push({ t: 'ability', id: u.id });
     for (const e of ab.effects) this.apply(u, e, other);
@@ -554,6 +563,8 @@ export class FieldBattle {
         return other?.alive ? [other] : [];
       case 'aroundTarget':
         return other ? this.around(other, src.side) : [];
+      case 'aroundSelf':
+        return this.around(src, src.side);
       case 'nearestEnemy': {
         const e = this.nearestEnemy(src);
         return e ? [e] : [];
@@ -622,6 +633,13 @@ export class FieldBattle {
       case 'summon':
         this.summon(src, effect.token, scaled(effect.atk, lv), scaled(effect.hp, lv), effect.count ?? 1);
         break;
+      case 'rebirth': {
+        if (src.reborn || src.alive) break;
+        const r = this.spawn(src.side, src.defId, src.level, src.squad, src.x, src.y, src.atk, Math.max(1, Math.round(src.maxHp * effect.hpPct)));
+        r.reborn = true;
+        this.events.push({ t: 'spawn', id: r.id });
+        break;
+      }
       case 'gold':
         break; // shop-only
     }

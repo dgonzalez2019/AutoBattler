@@ -7,7 +7,8 @@ import { squadCount } from '../game/army';
 import { opponents } from '../game/matchmaking';
 import { playerName } from '../game/player';
 import { MODULES, moduleText } from '../game/mothership';
-import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, UNIT_COST, WINS_TO_VICTORY } from '../game/run';
+import { MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
+import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
 import { button, drawBackground, panel, toast, type Button } from '../ui/widgets';
@@ -130,6 +131,7 @@ export class ShopScene extends Phaser.Scene {
       this.dyn.add(zone);
       const unit = run.team[i];
       if (unit) {
+        this.dyn.add(this.slotGraphic(x, TEAM_Y, isSel, isTarget, false, RARITY[getDef(unit.defId).rarity].color));
         this.dyn.add(this.makeView(x, TEAM_Y, unit, { kind: 'team', index: i }));
         this.dyn.add(this.countPill(x, TEAM_Y, unit.defId, unit.level));
       }
@@ -141,7 +143,8 @@ export class ShopScene extends Phaser.Scene {
       const x = shopX(i, n);
       const slot = run.shop[i];
       const isSel = this.selected?.kind === 'shop' && this.selected.index === i;
-      this.dyn.add(this.slotGraphic(x, SHOP_Y, isSel, false, slot?.frozen));
+      const rarityColor = slot ? RARITY[getDef(slot.unit.defId).rarity].color : undefined;
+      this.dyn.add(this.slotGraphic(x, SHOP_Y, isSel, false, slot?.frozen, rarityColor));
       if (!slot) continue;
       this.dyn.add(this.makeView(x, SHOP_Y, slot.unit, { kind: 'shop', index: i }));
       // Price tag
@@ -149,7 +152,11 @@ export class ShopScene extends Phaser.Scene {
       tag.fillStyle(COLORS.gold).fillCircle(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, 15);
       tag.lineStyle(2, 0x000000, 0.5).strokeCircle(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, 15);
       const price = this.add
-        .text(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, String(UNIT_COST), { fontFamily: FONT_DISPLAY, fontSize: '18px', color: '#3a2a00' })
+        .text(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, String(unitCost(slot.unit.defId)), {
+          fontFamily: FONT_DISPLAY,
+          fontSize: '18px',
+          color: run.gold >= unitCost(slot.unit.defId) ? '#3a2a00' : '#b00020',
+        })
         .setOrigin(0.5);
       this.dyn.add([tag, price]);
       this.dyn.add(this.countPill(x, SHOP_Y, slot.unit.defId, slot.unit.level));
@@ -167,10 +174,26 @@ export class ShopScene extends Phaser.Scene {
     this.btn.freeze.setEnabled(sel?.kind === 'shop');
     this.btn.freeze.setLabel(sel?.kind === 'shop' && run.shop[sel.index]?.frozen ? 'Unfreeze' : 'Freeze');
     this.btn.sell.setEnabled(sel?.kind === 'team');
-    this.btn.sell.setLabel(sel?.kind === 'team' ? `Sell  +${run.team[sel.index]?.level ?? 1}g` : 'Sell');
+    const sellUnit = sel?.kind === 'team' ? run.team[sel.index] : null;
+    this.btn.sell.setLabel(sellUnit ? `Sell  +${sellValue(getDef(sellUnit.defId).rarity, sellUnit.level)}g` : 'Sell');
+    this.renderOdds();
 
     this.renderSynergies();
     this.renderInfo();
+  }
+
+  /** Shop odds for this round, shown next to the SHOP label. */
+  private renderOdds() {
+    const odds = shopOdds(this.run.round);
+    let x = shopX(0, 4) - SLOT_W / 2 + 92;
+    for (const r of RARITIES) {
+      if (!odds[r - 1]) continue;
+      const t = this.add
+        .text(x, 432, `${RARITY[r].name} ${odds[r - 1]}%`, { fontFamily: FONT_BODY, fontSize: '13px', fontStyle: 'bold', color: hexColor(RARITY[r].color) })
+        .setOrigin(0, 0.5);
+      this.dyn.add(t);
+      x += t.width + 14;
+    }
   }
 
   /** Active and in-progress synergies, plus a preview of what the selected shop squad would add. */
@@ -252,11 +275,22 @@ export class ShopScene extends Phaser.Scene {
       .setOrigin(1, 0);
   }
 
-  private slotGraphic(x: number, y: number, selected: boolean, target: boolean, frozen = false) {
+  private slotGraphic(x: number, y: number, selected: boolean, target: boolean, frozen = false, rarity?: number) {
     const g = this.add.graphics();
-    const stroke = selected ? COLORS.gold : target ? COLORS.good : COLORS.panelStroke;
+    const stroke = selected ? COLORS.gold : target ? COLORS.good : (rarity ?? COLORS.panelStroke);
     g.fillStyle(frozen ? 0x1d4e6b : COLORS.panelLight, frozen ? 0.75 : 0.45).fillRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 18);
-    g.lineStyle(selected || target ? 4 : 2, stroke, selected || target ? 1 : 0.6).strokeRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 18);
+    if (rarity !== undefined && !frozen) {
+      // Rarity glow along the bottom of the card
+      g.fillStyle(rarity, 0.18).fillRoundedRect(x - SLOT_W / 2, y + SLOT_H / 2 - 50, SLOT_W, 50, { tl: 0, tr: 0, bl: 18, br: 18 });
+    }
+    const strong = selected || target || rarity !== undefined;
+    g.lineStyle(selected || target ? 4 : rarity !== undefined ? 3 : 2, stroke, strong ? 1 : 0.6).strokeRoundedRect(
+      x - SLOT_W / 2,
+      y - SLOT_H / 2,
+      SLOT_W,
+      SLOT_H,
+      18,
+    );
     return g;
   }
 
@@ -314,7 +348,7 @@ export class ShopScene extends Phaser.Scene {
       add(this.add.text(0, y + 4, 'CREATURES', { fontFamily: FONT_DISPLAY, fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0));
       add(
         this.add
-          .text(0, y + 26, members.map((c) => `${c.name} (T${c.tier})`).join(',  '), style(14, COLORS.textDim))
+          .text(0, y + 26, members.sort((a, b) => a.rarity - b.rarity).map((c) => `${c.name} (${RARITY[c.rarity].name})`).join(',  '), style(14, COLORS.textDim))
           .setOrigin(0.5, 0)
           .setLineSpacing(3),
       );
@@ -357,7 +391,7 @@ export class ShopScene extends Phaser.Scene {
         .text(
           0,
           72,
-          `Tier ${def.tier}  ·  Level ${unit.level}  ·  ${unit.atk} ATK / ${unit.hp} HP\nSquad of ${squadCount(def.id, unit.level, this.run.modules.barracks, swarm)}  ·  ${def.ranged ? 'Ranged' : 'Melee'}`,
+          `${RARITY[def.rarity].name}  ·  ${unitCost(def.id)} gold  ·  Level ${unit.level}\n${unit.atk} attack  ·  ${unit.hp} health  ·  Squad of ${squadCount(def.id, unit.level, this.run.modules.barracks, swarm)}  ·  ${def.ranged ? 'Ranged' : 'Melee'}`,
           style(14, '#ffffff', true),
         )
         .setOrigin(0.5, 0)
@@ -430,7 +464,7 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private tryBuy(shopIdx: number, teamIdx: number) {
-    if (this.run.gold < UNIT_COST) {
+    if (this.run.gold < this.run.cost(shopIdx)) {
       toast(this, 'Not enough gold');
       return;
     }

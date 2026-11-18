@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { levelForXp, Run, START_GOLD, UNIT_COST } from './run';
+import { levelForXp, Run, START_GOLD } from './run';
 
 describe('Run', () => {
   it('buys into an empty slot and spends gold', () => {
     const run = new Run(1);
     expect(run.buy(0, 0)).toBe(true);
-    expect(run.gold).toBe(START_GOLD - UNIT_COST);
+    expect(run.gold).toBe(START_GOLD - 3); // round 1 shop is all Commons (3g)
     expect(run.team[0]).not.toBeNull();
     expect(run.shop[0]).toBeNull();
   });
@@ -43,7 +43,7 @@ describe('Run', () => {
     run.team[0] = { defId: 'drone', atk: 1, hp: 1, level: 2, xp: 2 };
     run.gold = 0;
     run.sell(0);
-    expect(run.gold).toBe(2);
+    expect(run.gold).toBe(2); // level 2 Common
   });
 
   it('tracks wins, lives and game end', () => {

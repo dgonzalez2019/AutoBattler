@@ -1,4 +1,5 @@
-import { getDef, scaled, SHOP_POOL, type Effect } from '../data/creatures';
+import { getDef, scaled, SHOP_POOL, type CreatureDef, type Effect } from '../data/creatures';
+import { RARITY, rollRarity, sellValue } from '../data/rarity';
 import type { BattleResult } from '../sim/field';
 import { Rng, randomSeed } from '../sim/rng';
 import type { ArmySnapshot, SquadSpec } from './army';
@@ -19,7 +20,6 @@ export interface ShopSlot {
 }
 
 export const START_GOLD = 10;
-export const UNIT_COST = 3;
 export const REROLL_COST = 1;
 export const START_LIVES = 5;
 export const WINS_TO_VICTORY = 10;
@@ -32,6 +32,17 @@ export function levelForXp(xp: number): number {
 export function xpProgress(xp: number): { have: number; need: number } | null {
   if (xp >= 5) return null;
   return xp >= 2 ? { have: xp - 2, need: 3 } : { have: xp, need: 2 };
+}
+
+export function unitCost(defId: string): number {
+  return RARITY[getDef(defId).rarity].cost;
+}
+
+/** Roll a shop creature: pick a rarity with the round's odds, then a creature of that rarity. */
+export function rollCreature(rng: Rng, round: number): CreatureDef {
+  const rarity = rollRarity(round, rng.next());
+  const pool = SHOP_POOL.filter((c) => c.rarity === rarity);
+  return rng.pick(pool.length ? pool : SHOP_POOL.filter((c) => c.rarity === 1));
 }
 
 export type RunStatus = 'playing' | 'won' | 'lost';
@@ -60,18 +71,19 @@ export class Run {
     return 'playing';
   }
 
-  get maxTier(): number {
-    return Math.min(4, Math.ceil(this.round / 2));
-  }
-
   get shopSize(): number {
-    return this.round >= 5 ? 4 : 3;
+    return this.round >= 7 ? 5 : this.round >= 3 ? 4 : 3;
   }
 
   private rollUnit(): TeamUnit {
-    const pool = SHOP_POOL.filter((c) => c.tier <= this.maxTier);
-    const def = this.rng.pick(pool);
+    const def = rollCreature(this.rng, this.round);
     return { defId: def.id, atk: def.atk, hp: def.hp, level: 1, xp: 0 };
+  }
+
+  /** Gold price of a shop slot. */
+  cost(shopIndex: number): number {
+    const slot = this.shop[shopIndex];
+    return slot ? unitCost(slot.unit.defId) : 0;
   }
 
   private refillShop(all: boolean) {
@@ -97,7 +109,7 @@ export class Run {
   canPlace(shopIndex: number, teamIndex: number): boolean {
     const slot = this.shop[shopIndex];
     const target = this.team[teamIndex];
-    if (!slot || this.gold < UNIT_COST) return false;
+    if (!slot || this.gold < unitCost(slot.unit.defId)) return false;
     return !target || (target.defId === slot.unit.defId && target.level < 3);
   }
 
@@ -105,7 +117,7 @@ export class Run {
   buy(shopIndex: number, teamIndex: number): boolean {
     if (!this.canPlace(shopIndex, teamIndex)) return false;
     const slot = this.shop[shopIndex]!;
-    this.gold -= UNIT_COST;
+    this.gold -= unitCost(slot.unit.defId);
     this.shop[shopIndex] = null;
     const target = this.team[teamIndex];
     let placed: TeamUnit;
@@ -124,7 +136,7 @@ export class Run {
     const unit = this.team[teamIndex];
     if (!unit) return false;
     this.team[teamIndex] = null;
-    this.gold += unit.level;
+    this.gold += sellValue(getDef(unit.defId).rarity, unit.level);
     this.fireShopTrigger(unit, 'sell');
     return true;
   }

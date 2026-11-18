@@ -27,12 +27,18 @@ const STYLE = [
 async function loadCreatures() {
   // Parse the roster straight from the TypeScript source so there is one source of truth.
   const src = await readFile(new URL('../src/data/creatures.ts', import.meta.url), 'utf8');
-  const re = /id: '(\w+)', name: '(\w+)', element: '(\w+)', class: '(\w+)', tier: (\d)[\s\S]*?look: '([^']*)'/g;
-  return [...src.matchAll(re)].map(([, id, name, element, cls, tier, look]) => ({ id, name, element, cls, tier: +tier, look }));
+  const re = /id: '(\w+)', name: '(\w+)', element: '(\w+)', class: '(\w+)', rarity: (\d)[\s\S]*?look: '([^']*)'/g;
+  return [...src.matchAll(re)].map(([, id, name, element, cls, rarity, look]) => ({ id, name, element, cls, rarity: +rarity, look }));
 }
 
 function prompt(c) {
-  const size = c.tier >= 4 ? 'a large, powerful, imposing' : c.tier === 3 ? 'a strong, evolved-looking' : c.tier === 2 ? 'a mid-sized' : 'a small, cute, basic';
+  const size = [
+    'a small, cute, basic',
+    'a mid-sized, capable-looking',
+    'a strong, evolved-looking',
+    'a large, powerful, imposing',
+    'a legendary, majestic, awe-inspiring and highly detailed',
+  ][c.rarity - 1];
   return `${STYLE} The creature is ${size} ${c.look}. Color palette: ${PALETTE[c.element]}. Name: ${c.name}.`;
 }
 
@@ -53,7 +59,7 @@ async function generate(c) {
 }
 
 /** Creatures the model drew facing left; mirrored so every sprite faces right. */
-const FLIP = new Set(['frostling', 'gearhound', 'mechadon']);
+const FLIP = new Set(['frostling', 'gearhound', 'mechadon', 'emberpup', 'pyrolisk', 'railhawk', 'blizzowl', 'mantidra']);
 
 /** Trim empty space, fit into a 256px square (high-quality downscale), mirror if needed. */
 export async function toSprite(png, flip) {

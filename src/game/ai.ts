@@ -1,8 +1,8 @@
-import { getDef, SHOP_POOL } from '../data/creatures';
+import { getDef } from '../data/creatures';
 import { Rng } from '../sim/rng';
 import type { ArmySnapshot, SquadSpec } from './army';
 import { emptyModules, MODULES } from './mothership';
-import { MAX_SQUADS, MERGE_HP } from './run';
+import { MAX_SQUADS, MERGE_HP, rollCreature } from './run';
 import { ELEMENTS } from '../data/elements';
 import { CLASSES, type TraitId } from '../data/traits';
 
@@ -16,9 +16,9 @@ export function botName(rng: Rng): string {
 /** An AI army roughly matched to what a player could have built by this round. */
 export function generateOpponent(round: number, seed: number): ArmySnapshot {
   const rng = new Rng(seed);
-  const maxTier = Math.min(4, Math.ceil(round / 2));
   const size = Math.min(MAX_SQUADS, round + 1);
-  const pool = SHOP_POOL.filter((c) => c.tier <= maxTier);
+  // Same odds as the player's shop, rolled a few times to mimic rerolling.
+  const pool = [...Array(18)].map(() => rollCreature(rng, round));
   // Like a real player, the AI commits to a synergy: an element or a class to stack.
   const focus = rng.pick<TraitId>([...ELEMENTS, ...CLASSES]);
   const fits = pool.filter((c) => c.element === focus || c.class === focus);

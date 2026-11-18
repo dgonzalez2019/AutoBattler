@@ -13,8 +13,21 @@ npm run build    # production build into dist/
 
 ## How it plays
 
-- **Squads:** each shop purchase is a squad of creatures. Tier 1 squads field 6 units and tier 4 squads field 2. Your army has 5 squad slots, and the front slot deploys closest to the enemy.
-- **Shop:** you get 10 gold every turn. A squad costs 3, a reroll costs 1, and selling a squad refunds its level in gold. You can freeze a shop slot to keep it for later.
+- **Roster:** 45 creatures, 9 per element.
+- **Rarities:**
+
+  | Rarity | Cost | Units per squad | Per element |
+  |---|---|---|---|
+  | Common | 3g | 6 | 3 |
+  | Uncommon | 4g | 4 | 2 |
+  | Rare | 5g | 3 | 2 |
+  | Epic | 6g | 2 | 1 |
+  | Legendary | 8g | 1 powerhouse | 1 |
+
+- **Squads:** each shop purchase is a squad. Your army has 5 squad slots, and the front slot deploys closest to the enemy.
+- **Shop:** you get 10 gold every turn. A reroll costs 1, and selling refunds `level + rarity - 1` gold. You can freeze a shop slot to keep it for later.
+  - The shop has 3 slots at first, 4 from round 3 and 5 from round 7.
+  - Odds shift toward rarer creatures each round. Round 1 is all Commons; by round 11 it's 20 / 25 / 30 / 18 / 7%. See `src/data/rarity.ts`.
 - **Merging:** drop a duplicate squad onto its twin. Each merge gives +1 attack and +2 health per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. Ability numbers multiply by level.
 - **Battle:** both armies charge across a real-time battlefield. Abilities trigger on start of battle, attack, hurt, faint, kill or a timer ("every 4s"). Some trigger in the shop instead: on buy, sell or end of turn.
 - **Mothership:** your home base, upgraded with shop gold for the whole run.
