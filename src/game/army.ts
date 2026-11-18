@@ -22,6 +22,8 @@ export interface ArmySnapshot {
   /** Index 0 is the front squad. */
   squads: SquadSpec[];
   modules: ModuleLevels;
+  /** Commander id; their battle passive applies to this army. */
+  commander?: string;
 }
 
 const LEVEL_SIZE = [1, 1.5, 2];

@@ -10,7 +10,7 @@ create table if not exists public.armies (
   version     int  not null check (version between 1 and 1000),
   round       int  not null check (round between 1 and 40),
   wins        int  not null check (wins between 0 and 10),
-  lives       int  not null check (lives between 0 and 5),
+  lives       int  not null check (lives between 0 and 7),
   army        jsonb not null check (
     jsonb_typeof(army -> 'squads') = 'array'
     and jsonb_array_length(army -> 'squads') between 1 and 5

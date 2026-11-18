@@ -1,3 +1,4 @@
+import { COMMANDER_LIST } from '../data/commanders';
 import { getDef } from '../data/creatures';
 import { Rng } from '../sim/rng';
 import type { ArmySnapshot, SquadSpec } from './army';
@@ -6,8 +7,8 @@ import { MAX_SQUADS, MERGE_HP, rollCreature } from './run';
 import { ELEMENTS } from '../data/elements';
 import { CLASSES, type TraitId } from '../data/traits';
 
-const PREFIX = ['Admiral', 'Captain', 'Commander', 'Warlord', 'Pilot', 'Overseer'];
-const NAMES = ['Zyx', 'Nova', 'Kael', 'Vex', 'Orion', 'Lyra', 'Juno', 'Rook', 'Talon', 'Sable', 'Quill', 'Ember'];
+const PREFIX = ['Admiral', 'Captain', 'Major', 'Ranger', 'Pilot', 'Agent'];
+const NAMES = ['Orion', 'Lyra', 'Juno', 'Talon', 'Sable', 'Quill', 'Ember', 'Astra', 'Cobalt', 'Draco', 'Halo', 'Pike'];
 
 export function botName(rng: Rng): string {
   return `${rng.pick(PREFIX)} ${rng.pick(NAMES)}-${1 + rng.int(99)}`;
@@ -48,5 +49,5 @@ export function generateOpponent(round: number, seed: number): ArmySnapshot {
   }
   // Melee tanks in front, ranged squads in back.
   squads.sort((a, b) => Number(!!getDef(a.defId).ranged) - Number(!!getDef(b.defId).ranged) || b.hp - a.hp);
-  return { name: botName(rng), round, wins: rng.int(round), lives: 5, squads, modules };
+  return { name: botName(rng), round, wins: rng.int(round), lives: 5, squads, modules, commander: rng.pick(COMMANDER_LIST).id };
 }

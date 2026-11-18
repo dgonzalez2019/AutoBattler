@@ -1,3 +1,4 @@
+import { COMMANDERS } from '../data/commanders';
 import { CREATURES } from '../data/creatures';
 import type { ArmySnapshot, SquadSpec } from './army';
 import { emptyModules, MODULES, type ModuleLevels } from './mothership';
@@ -43,8 +44,9 @@ export function parseArmy(raw: unknown): ArmySnapshot | null {
     name,
     round: int(r.round, 1, 40) ?? 1,
     wins: int(r.wins, 0, 10) ?? 0,
-    lives: int(r.lives, 0, 5) ?? 0,
+    lives: int(r.lives, 0, 7) ?? 0,
     squads,
     modules,
+    commander: typeof army.commander === 'string' && COMMANDERS[army.commander] ? army.commander : undefined,
   };
 }

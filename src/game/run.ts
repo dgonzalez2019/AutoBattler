@@ -1,4 +1,5 @@
-import { getDef, scaled, SHOP_POOL, type CreatureDef, type Effect } from '../data/creatures';
+import { getCommander, type CommanderDef } from '../data/commanders';
+import { CREATURES, getDef, scaled, SHOP_POOL, type CreatureDef, type Effect } from '../data/creatures';
 import { RARITY, rollRarity, sellValue } from '../data/rarity';
 import type { BattleResult } from '../sim/field';
 import { Rng, randomSeed } from '../sim/rng';
@@ -38,11 +39,27 @@ export function unitCost(defId: string): number {
   return RARITY[getDef(defId).rarity].cost;
 }
 
-/** Roll a shop creature: pick a rarity with the round's odds, then a creature of that rarity. */
-export function rollCreature(rng: Rng, round: number): CreatureDef {
+/**
+ * Roll a shop creature: pick a rarity with the round's odds, then a creature of that rarity
+ * from `pool` (defaults to every creature; players roll only what they've unlocked).
+ */
+export function rollCreature(rng: Rng, round: number, pool: readonly CreatureDef[] = SHOP_POOL): CreatureDef {
   const rarity = rollRarity(round, rng.next());
-  const pool = SHOP_POOL.filter((c) => c.rarity === rarity);
-  return rng.pick(pool.length ? pool : SHOP_POOL.filter((c) => c.rarity === 1));
+  const ofRarity = pool.filter((c) => c.rarity === rarity);
+  // Fall back to the closest rarity the pool has.
+  if (ofRarity.length) return rng.pick(ofRarity);
+  for (let d = 1; d < 5; d++) {
+    const near = pool.filter((c) => c.rarity === rarity - d || c.rarity === rarity + d);
+    if (near.length) return rng.pick(near);
+  }
+  return rng.pick(SHOP_POOL);
+}
+
+export interface RunOptions {
+  seed?: number;
+  commander?: string;
+  /** Creature ids the shop may roll (the player's unlocked collection). */
+  pool?: string[];
 }
 
 export type RunStatus = 'playing' | 'won' | 'lost';
@@ -58,11 +75,42 @@ export class Run {
   modules: ModuleLevels = emptyModules();
   shop: (ShopSlot | null)[] = [];
   lastResult: BattleResult | null = null;
+  readonly commander: CommanderDef;
+  /** Gold banked by economy abilities, added at the start of next turn. */
+  bankedGold = 0;
+  private freeRerolls = 0;
+  private readonly pool: CreatureDef[];
   private rng: Rng;
 
-  constructor(seed = randomSeed()) {
-    this.rng = new Rng(seed);
+  constructor(opts: RunOptions | number = {}) {
+    const o = typeof opts === 'number' ? { seed: opts } : opts;
+    this.rng = new Rng(o.seed ?? randomSeed());
+    this.commander = getCommander(o.commander);
+    const pool = (o.pool ?? SHOP_POOL.map((c) => c.id)).map((id) => CREATURES[id]).filter((c) => c && !c.token);
+    this.pool = pool.length ? pool : SHOP_POOL;
+    this.lives = this.fx.startLives ?? START_LIVES;
+    this.startTurn();
     this.refillShop(true);
+  }
+
+  private get fx() {
+    return this.commander.effects;
+  }
+
+  get maxLives(): number {
+    return this.fx.startLives ?? START_LIVES;
+  }
+
+  /** Free rerolls left this turn (commander perk). */
+  get rerollCost(): number {
+    return this.freeRerolls > 0 ? 0 : REROLL_COST;
+  }
+
+  private startTurn() {
+    this.gold = this.turnGold + this.bankedGold;
+    if (this.fx.goldEveryOtherRound && this.round % 2 === 0) this.gold += this.fx.goldEveryOtherRound;
+    this.bankedGold = 0;
+    this.freeRerolls = this.fx.freeRerollsPerTurn ?? 0;
   }
 
   get status(): RunStatus {
@@ -72,11 +120,11 @@ export class Run {
   }
 
   get shopSize(): number {
-    return this.round >= 7 ? 5 : this.round >= 3 ? 4 : 3;
+    return (this.round >= 7 ? 5 : this.round >= 3 ? 4 : 3) + (this.fx.extraShopSlot ?? 0);
   }
 
   private rollUnit(): TeamUnit {
-    const def = rollCreature(this.rng, this.round);
+    const def = rollCreature(this.rng, this.round, this.pool);
     return { defId: def.id, atk: def.atk, hp: def.hp, level: 1, xp: 0 };
   }
 
@@ -95,8 +143,9 @@ export class Run {
   }
 
   reroll(): boolean {
-    if (this.gold < REROLL_COST) return false;
-    this.gold -= REROLL_COST;
+    if (this.freeRerolls > 0) this.freeRerolls--;
+    else if (this.gold < REROLL_COST) return false;
+    else this.gold -= REROLL_COST;
     this.refillShop(false);
     return true;
   }
@@ -121,11 +170,17 @@ export class Run {
     this.shop[shopIndex] = null;
     const target = this.team[teamIndex];
     let placed: TeamUnit;
+    const bonus = this.fx.buyBonus;
+    const bought = { ...slot.unit };
+    if (bonus && getDef(bought.defId).element === bonus.element) {
+      bought.atk += bonus.atk;
+      bought.hp += bonus.hp;
+    }
     if (target) {
-      this.mergeInto(target, slot.unit);
+      this.mergeInto(target, bought);
       placed = target;
     } else {
-      placed = { ...slot.unit };
+      placed = bought;
       this.team[teamIndex] = placed;
     }
     this.fireShopTrigger(placed, 'buy');
@@ -136,7 +191,7 @@ export class Run {
     const unit = this.team[teamIndex];
     if (!unit) return false;
     this.team[teamIndex] = null;
-    this.gold += sellValue(getDef(unit.defId).rarity, unit.level);
+    this.gold += sellValue(getDef(unit.defId).rarity, unit.level) + (this.fx.sellBonus ?? 0);
     this.fireShopTrigger(unit, 'sell');
     return true;
   }
@@ -167,15 +222,17 @@ export class Run {
   private fireShopTrigger(unit: TeamUnit, trigger: 'buy' | 'sell' | 'endTurn') {
     for (const ab of getDef(unit.defId).abilities) {
       if (ab.trigger !== trigger) continue;
-      for (const e of ab.effects) this.applyShopEffect(unit, e);
+      for (const e of ab.effects) this.applyShopEffect(unit, e, trigger);
     }
   }
 
   /** Shop abilities: buffs between squads and gold. Battle-only effects do nothing here. */
-  private applyShopEffect(src: TeamUnit, effect: Effect) {
+  private applyShopEffect(src: TeamUnit, effect: Effect, trigger: 'buy' | 'sell' | 'endTurn') {
     const lv = src.level;
     if (effect.kind === 'gold') {
-      this.gold += scaled(effect.amount, lv);
+      // End-of-turn gold would be wiped by the next turn's reset, so bank it.
+      if (trigger === 'endTurn') this.bankedGold += scaled(effect.amount, lv);
+      else this.gold += scaled(effect.amount, lv);
       return;
     }
     if (effect.kind !== 'buff') return;
@@ -204,7 +261,7 @@ export class Run {
   moduleCost(id: ModuleId): number | null {
     const def = MODULES.find((m) => m.id === id)!;
     const lvl = this.modules[id];
-    return lvl >= def.maxLevel ? null : def.costs[lvl];
+    return lvl >= def.maxLevel ? null : Math.max(1, def.costs[lvl] - (this.fx.moduleDiscount ?? 0));
   }
 
   buyModule(id: ModuleId): boolean {
@@ -229,6 +286,7 @@ export class Run {
       lives: this.lives,
       squads: this.team.filter((u): u is TeamUnit => !!u).map(({ defId, atk, hp, level }) => ({ defId, atk, hp, level })),
       modules: { ...this.modules },
+      commander: this.commander.id,
     };
   }
 
@@ -238,7 +296,7 @@ export class Run {
     if (result === 'win') this.wins++;
     if (result === 'lose') this.lives = Math.max(0, this.lives - (this.round <= 2 ? 1 : 2));
     this.round++;
-    this.gold = this.turnGold;
+    this.startTurn();
     this.refillShop(false);
   }
 

@@ -6,6 +6,7 @@ import Phaser from 'phaser';
 import { BattleScene } from './scenes/BattleScene';
 import { BootScene } from './scenes/BootScene';
 import { GameOverScene } from './scenes/GameOverScene';
+import { HQScene } from './scenes/HQScene';
 import { ShopScene } from './scenes/ShopScene';
 import { TitleScene } from './scenes/TitleScene';
 import { H, W } from './ui/theme';
@@ -28,7 +29,7 @@ async function start() {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     render: { antialias: true, roundPixels: false, mipmapFilter: 'LINEAR_MIPMAP_LINEAR' },
     input: { activePointers: 2 },
-    scene: [BootScene, TitleScene, ShopScene, BattleScene, GameOverScene],
+    scene: [BootScene, TitleScene, HQScene, ShopScene, BattleScene, GameOverScene],
   });
 }
 

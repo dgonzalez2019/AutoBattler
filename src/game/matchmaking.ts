@@ -133,7 +133,7 @@ export class OnlineOpponentSource implements OpponentSource {
           round: snapshot.round,
           wins: snapshot.wins,
           lives: snapshot.lives,
-          army: { squads: snapshot.squads, modules: snapshot.modules },
+          army: { squads: snapshot.squads, modules: snapshot.modules, commander: snapshot.commander },
         },
         'return=minimal',
       );

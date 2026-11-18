@@ -13,16 +13,16 @@ npm run build    # production build into dist/
 
 ## How it plays
 
-- **Roster:** 45 creatures, 9 per element.
+- **Roster:** 75 creatures, 15 per element. 45 are available from the start, and 30 unlock through progression.
 - **Rarities:**
 
-  | Rarity | Cost | Units per squad | Per element |
+  | Rarity | Cost | Units per squad | Per element (base + unlockable) |
   |---|---|---|---|
-  | Common | 3g | 6 | 3 |
-  | Uncommon | 4g | 4 | 2 |
-  | Rare | 5g | 3 | 2 |
-  | Epic | 6g | 2 | 1 |
-  | Legendary | 8g | 1 powerhouse | 1 |
+  | Common | 3g | 6 | 3 + 2 |
+  | Uncommon | 4g | 4 | 2 + 1 |
+  | Rare | 5g | 3 | 2 + 1 |
+  | Epic | 6g | 2 | 1 + 1 |
+  | Legendary | 8g | 1 powerhouse | 1 + 1 |
 
 - **Squads:** each shop purchase is a squad. Your army has 5 squad slots, and the front slot deploys closest to the enemy.
 - **Shop:** you get 10 gold every turn. A reroll costs 1, and selling refunds `level + rarity - 1` gold. You can freeze a shop slot to keep it for later.
@@ -88,6 +88,23 @@ OPENAI_API_KEY=sk-... npm run art -- --force    # regenerate everything
 ```
 
 The prompts are built from each creature's `look`, element and tier in `src/data/creatures.ts`. A shared style line keeps the whole roster consistent. Full-size originals are saved to `art-source/`, which git ignores.
+
+## Commanders and meta progression
+
+Progress carries over between runs (`src/game/profile.ts`, stored in the browser for now).
+
+- **Commanders:** you pick one of 14 in **Command HQ** before each run (`src/data/commanders.ts`). Each has one passive that changes how you play. Some examples:
+  - Zix: first reroll each turn is free, and selling pays +1 gold.
+  - Pyra: every Burn you apply has +1 stack.
+  - Orin: +1 shop slot.
+  - The Hollow King: fallen creatures may rise as Voidspawn.
+  - Overseer Prime: start with 7 lives.
+- **Commander Level and XP:** earned from every run, based on wins, rounds survived and championships.
+- **Reward track:** each level grants 50 Stardust and unlocks creatures or commanders (Command HQ, Level Rewards tab).
+- **Stardust:** buy commanders before their level, or research a locked creature early (80 to 400 depending on rarity).
+- **Collection:** all 75 creatures by element and rarity, with lock state and details.
+- **Unlocks are sidegrades:** they add options rather than raw power, so online matches stay fair between new and veteran players. Your shop only rolls creatures you've unlocked, but opponents can field anything.
+- **Economy creatures:** Sparkplug, Dynamo and Scrapper bank or earn gold. End-of-turn gold carries into the next turn.
 
 ## Online matchmaking
 

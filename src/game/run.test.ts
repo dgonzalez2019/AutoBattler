@@ -71,7 +71,7 @@ describe('Mothership', () => {
   });
 
   it('reactor adds gold each turn', () => {
-    const run = new Run(1);
+    const run = new Run({ seed: 1, commander: 'rook' }); // Rook has no gold perk
     run.modules.reactor = 1;
     run.finishBattle('win');
     expect(run.gold).toBe(START_GOLD + 1);

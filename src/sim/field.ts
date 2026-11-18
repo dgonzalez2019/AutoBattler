@@ -4,6 +4,7 @@ import type { CreatureClass, TraitLevels } from '../data/traits';
 import { squadCount, type ArmySnapshot } from '../game/army';
 import { moduleBonus } from '../game/mothership';
 import { computeTraits } from '../game/synergy';
+import { getCommander, type CommanderEffects } from '../data/commanders';
 import { Rng } from './rng';
 
 export type Side = 0 | 1;
@@ -124,6 +125,8 @@ export class FieldBattle {
   readonly units: FieldUnit[] = [];
   readonly projectiles: Projectile[] = [];
   readonly traits: [TraitLevels, TraitLevels];
+  /** Each side's commander passive. */
+  readonly cmd: [CommanderEffects, CommanderEffects];
   /** Events since the last drain; the renderer consumes these. */
   events: FieldEvent[] = [];
   time = 0;
@@ -142,7 +145,13 @@ export class FieldBattle {
   ) {
     this.rng = new Rng(seed);
     this.traits = [computeTraits(armies[0].squads).levels, computeTraits(armies[1].squads).levels];
+    this.cmd = [getCommander(armies[0].commander).effects, getCommander(armies[1].commander).effects];
     armies.forEach((army, side) => this.deploy(army, side as Side));
+    // Commander openers
+    ([0, 1] as Side[]).forEach((side) => {
+      const secs = this.cmd[side].chillAllSeconds;
+      if (secs) for (const u of this.units) if (u.alive && u.side !== side) this.applyChill(u, secs, side);
+    });
     // Start of battle abilities: strongest first, player side wins ties.
     const order = [...this.units].sort((a, b) => b.atk - a.atk || a.side - b.side || a.id - b.id);
     for (const u of order) if (u.alive) this.trigger(u, 'startOfBattle');
@@ -157,7 +166,11 @@ export class FieldBattle {
     const tr = this.traits[side];
     let cursor = FIELD_W / 2 - 110; // front edge, moving backward
     army.squads.forEach((sq, squadIdx) => {
-      const count = squadCount(sq.defId, sq.level, army.modules.barracks, tr.swarm);
+      const def = getDef(sq.defId);
+      const fx = this.cmd[side];
+      const count =
+        squadCount(sq.defId, sq.level, army.modules.barracks, tr.swarm) + (def.class === 'swarm' ? (fx.swarmExtraUnits ?? 0) : 0);
+      const frontHp = squadIdx === 0 ? (fx.frontSquadHp ?? 0) : 0;
       const rows = Math.min(MAX_ROWS, count);
       const cols = Math.ceil(count / rows);
       for (let i = 0; i < count; i++) {
@@ -166,7 +179,7 @@ export class FieldBattle {
         const inCol = Math.min(rows, count - col * rows);
         const x = Math.max(20, cursor - col * COL_GAP);
         const y = FIELD_H / 2 + (row - (inCol - 1) / 2) * ROW_GAP + (col % 2) * 10;
-        this.spawn(side, sq.defId, sq.level, squadIdx, side === 0 ? x : FIELD_W - x, y, sq.atk + bonusAtk, sq.hp + bonusHp);
+        this.spawn(side, sq.defId, sq.level, squadIdx, side === 0 ? x : FIELD_W - x, y, sq.atk + bonusAtk, sq.hp + bonusHp + frontHp);
       }
       cursor -= cols * COL_GAP + 22;
     });
@@ -213,7 +226,7 @@ export class FieldBattle {
       splash: false,
       moveSpeed: 1,
       shieldBreakAtk: 0,
-      timers: def.abilities.map(() => 0),
+      timers: def.abilities.map((a) => (a.every ?? 0) * (this.cmd[side].timerPrecharge ?? 0)),
       reborn: false,
     };
     // Synergy bonuses
@@ -230,6 +243,9 @@ export class FieldBattle {
       u.moveSpeed = 1 + STRIKER_SPEED[tr.striker];
       if (tr.striker >= 2) u.crit = 0.25;
     }
+    const fx = this.cmd[side];
+    if (u.element === 'mech' && fx.mechShield) u.shield += fx.mechShield;
+    if (fx.classAtk && u.cls === fx.classAtk.cls) u.atk += fx.classAtk.atk;
     if (u.cls === 'gunner' && tr.gunner) {
       u.atk += 1;
       if (tr.gunner >= 2) u.splash = true;
@@ -429,7 +445,7 @@ export class FieldBattle {
     const tr = this.traits[h.side];
     this.damage(target, dmg, { eff: mult > 1 ? 'super' : mult < 1 ? 'weak' : undefined, crit, source: src });
     // Element on-hit synergies
-    if (h.element === 'plasma' && tr.plasma) this.applyBurn(target, tr.plasma);
+    if (h.element === 'plasma' && tr.plasma) this.applyBurn(target, tr.plasma, h.side);
     if (h.element === 'cryo' && tr.cryo) this.applyChill(target, 2, h.side);
     // Gunner splash
     if (h.splash) {
@@ -485,6 +501,9 @@ export class FieldBattle {
     if (u.element === 'void' && !u.token && this.traits[u.side].void >= 2) {
       this.summon(u, 'voidspawn', 2, 3, 1);
     }
+    // Commander (Hollow King): fallen creatures may rise again.
+    const rise = this.cmd[u.side].voidRiseChance;
+    if (rise && !u.token && this.rng.next() < rise) this.summon(u, 'voidspawn', 2, 4, 1);
   }
 
   private heal(u: FieldUnit, amount: number, show = true) {
@@ -494,8 +513,9 @@ export class FieldBattle {
     if (show && u.hp > before) this.events.push({ t: 'heal', id: u.id, amount: Math.round(u.hp - before) });
   }
 
-  private applyBurn(u: FieldUnit, stacks: number) {
+  private applyBurn(u: FieldUnit, stacks: number, bySide: Side) {
     if (!u.alive || stacks <= 0) return;
+    stacks += this.cmd[bySide].burnBonus ?? 0;
     if (u.burn === 0) {
       u.burnTimer = BURN_TICK;
       u.burnFade = true;
@@ -602,7 +622,7 @@ export class FieldBattle {
         for (const t of this.targets(src, effect.to, other, effect.count)) this.damage(t, amt(effect.amount), { ability: true, source: src });
         break;
       case 'burn':
-        for (const t of this.targets(src, effect.to, other, effect.count)) this.applyBurn(t, amt(effect.stacks));
+        for (const t of this.targets(src, effect.to, other, effect.count)) this.applyBurn(t, amt(effect.stacks), src.side);
         break;
       case 'chill':
         for (const t of this.targets(src, effect.to, other, effect.count)) this.applyChill(t, effect.seconds, src.side);

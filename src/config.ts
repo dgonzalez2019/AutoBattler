@@ -18,6 +18,6 @@ export const SUPABASE_ANON_KEY: string = import.meta.env.VITE_SUPABASE_ANON_KEY 
  * Bump whenever creatures, stats or rules change in a way that makes old saved
  * armies unfair or invalid. Players only match armies saved on the same version.
  */
-export const GAME_VERSION = 2;
+export const GAME_VERSION = 3;
 
 export const onlineEnabled = () => !!(SUPABASE_URL && SUPABASE_ANON_KEY);

@@ -3,7 +3,7 @@ import { emptyModules } from '../game/mothership';
 import { Run, rollCreature } from '../game/run';
 import { FieldBattle } from '../sim/field';
 import { Rng } from '../sim/rng';
-import { CREATURES, SHOP_POOL } from './creatures';
+import { BASE_POOL, CREATURES, SHOP_POOL } from './creatures';
 import { ELEMENTS } from './elements';
 import { RARITY, rollRarity, sellValue, shopOdds } from './rarity';
 
@@ -25,12 +25,14 @@ describe('rarity', () => {
     expect(rollRarity(11, 0)).toBe(1);
   });
 
-  it('each element has 3 Common, 2 Uncommon, 2 Rare, 1 Epic, 1 Legendary', () => {
+  it('each element: base 3/2/2/1/1 plus unlockables for 5/3/3/2/2 in total', () => {
     for (const el of ELEMENTS) {
-      const counts = [1, 2, 3, 4, 5].map((r) => SHOP_POOL.filter((c) => c.element === el && c.rarity === r).length);
-      expect(counts).toEqual([3, 2, 2, 1, 1]);
+      const count = (pool: typeof SHOP_POOL) => [1, 2, 3, 4, 5].map((r) => pool.filter((c) => c.element === el && c.rarity === r).length);
+      expect(count(BASE_POOL)).toEqual([3, 2, 2, 1, 1]);
+      expect(count(SHOP_POOL)).toEqual([5, 3, 3, 2, 2]);
     }
-    expect(SHOP_POOL.length).toBe(45);
+    expect(BASE_POOL.length).toBe(45);
+    expect(SHOP_POOL.length).toBe(75);
   });
 
   it('round 1 shops only roll Commons; late shops can roll Legendaries', () => {
@@ -73,11 +75,12 @@ describe('new mechanics', () => {
   });
 
   it('ally-faint creatures grow when allies die', () => {
-    const b = new FieldBattle([army([{ defId: 'voidmaw' }, { defId: 'nullmite' }]), army([{ defId: 'mechadon', level: 2 }])], 2);
+    // Nullmites in front so they fall while the Voidmaws behind them are still alive.
+    const b = new FieldBattle([army([{ defId: 'nullmite' }, { defId: 'voidmaw' }]), army([{ defId: 'mechadon', level: 2 }])], 2);
     const start = b.units.find((u) => u.defId === 'voidmaw')!.atk;
     for (let i = 0; i < 600 && !b.result; i++) b.step();
-    const maw = b.units.find((u) => u.defId === 'voidmaw')!;
-    expect(maw.atk).toBeGreaterThan(start);
+    const best = Math.max(...b.units.filter((u) => u.defId === 'voidmaw').map((u) => u.atk));
+    expect(best).toBeGreaterThan(start);
   });
 
   it('every creature can fight every other without errors', () => {

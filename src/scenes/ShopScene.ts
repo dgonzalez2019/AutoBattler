@@ -12,6 +12,7 @@ import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity'
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
 import { button, drawBackground, panel, toast, type Button } from '../ui/widgets';
+import { commanderBadge } from '../art/commanderArt';
 
 type Selection = { kind: 'shop' | 'team'; index: number } | null;
 
@@ -38,6 +39,7 @@ export class ShopScene extends Phaser.Scene {
   private ship: Phaser.GameObjects.Container | null = null;
   private syn!: Phaser.GameObjects.Container;
   private trait: TraitId | null = null;
+  private showCommander = false;
   private busy = false;
 
   constructor() {
@@ -53,10 +55,10 @@ export class ShopScene extends Phaser.Scene {
 
     // HUD
     this.hud = {
-      gold: this.hudPill(150, 'GOLD', COLORS.gold),
-      lives: this.hudPill(390, 'LIVES', COLORS.health),
-      wins: this.hudPill(630, 'WINS', COLORS.good),
-      round: this.hudPill(870, 'ROUND', COLORS.highlight),
+      gold: this.hudPill(345, 'GOLD', COLORS.gold),
+      lives: this.hudPill(510, 'LIVES', COLORS.health),
+      wins: this.hudPill(675, 'WINS', COLORS.good),
+      round: this.hudPill(840, 'ROUND', COLORS.highlight),
     };
 
     // Section labels
@@ -67,6 +69,8 @@ export class ShopScene extends Phaser.Scene {
     panel(this, SYN_X + SYN_W / 2, 375, SYN_W, 490);
     this.syn = this.add.container(0, 0);
     this.trait = null;
+    this.showCommander = false;
+    this.commanderChip();
 
     panel(this, INFO_X, 380, 300, 470);
     this.info = this.add.container(INFO_X, 160);
@@ -92,11 +96,31 @@ export class ShopScene extends Phaser.Scene {
 
   private hudPill(x: number, name: string, color: number) {
     const g = this.add.graphics();
-    g.fillStyle(COLORS.panel, 0.9).fillRoundedRect(x - 105, 22, 210, 52, 26);
-    g.lineStyle(2, color, 0.9).strokeRoundedRect(x - 105, 22, 210, 52, 26);
-    g.fillStyle(color).fillCircle(x - 78, 48, 13);
-    this.add.text(x - 56, 48, name, { fontFamily: FONT_BODY, fontSize: '16px', fontStyle: 'bold', color: COLORS.textDim }).setOrigin(0, 0.5);
-    return this.add.text(x + 85, 48, '', { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffffff' }).setOrigin(1, 0.5);
+    g.fillStyle(COLORS.panel, 0.9).fillRoundedRect(x - 78, 22, 156, 52, 26);
+    g.lineStyle(2, color, 0.9).strokeRoundedRect(x - 78, 22, 156, 52, 26);
+    g.fillStyle(color).fillCircle(x - 54, 48, 11);
+    this.add.text(x - 38, 48, name, { fontFamily: FONT_BODY, fontSize: '13px', fontStyle: 'bold', color: COLORS.textDim }).setOrigin(0, 0.5);
+    return this.add.text(x + 62, 48, '', { fontFamily: FONT_DISPLAY, fontSize: '24px', color: '#ffffff' }).setOrigin(1, 0.5);
+  }
+
+  /** Commander badge (top left): tap to read the passive in the info panel. */
+  private commanderChip() {
+    const c = this.run.commander;
+    const g = this.add.graphics();
+    g.fillStyle(COLORS.panel, 0.9).fillRoundedRect(18, 20, 240, 56, 28);
+    g.lineStyle(2, c.color, 0.9).strokeRoundedRect(18, 20, 240, 56, 28);
+    commanderBadge(this, 48, 48, c.id, c.color, 50);
+    this.add.text(80, 37, c.name, { fontFamily: FONT_DISPLAY, fontSize: '16px', color: hexColor(c.color) }).setOrigin(0, 0.5);
+    this.add.text(80, 59, c.title, { fontFamily: FONT_BODY, fontSize: '12px', fontStyle: 'bold', color: COLORS.textDim }).setOrigin(0, 0.5);
+    this.add
+      .zone(138, 48, 240, 56)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => {
+        this.selected = null;
+        this.trait = null;
+        this.showCommander = !this.showCommander;
+        this.refresh();
+      });
   }
 
   private label(x: number, y: number, text: string) {
@@ -170,7 +194,8 @@ export class ShopScene extends Phaser.Scene {
 
     // Buttons
     const sel = this.selected;
-    this.btn.reroll.setEnabled(run.gold >= REROLL_COST);
+    this.btn.reroll.setEnabled(run.rerollCost === 0 || run.gold >= REROLL_COST);
+    this.btn.reroll.setLabel(run.rerollCost === 0 ? 'Reroll  FREE' : `Reroll  ${REROLL_COST}g`);
     this.btn.freeze.setEnabled(sel?.kind === 'shop');
     this.btn.freeze.setLabel(sel?.kind === 'shop' && run.shop[sel.index]?.frozen ? 'Unfreeze' : 'Freeze');
     this.btn.sell.setEnabled(sel?.kind === 'team');
@@ -315,8 +340,12 @@ export class ShopScene extends Phaser.Scene {
     return v;
   }
 
+  private infoBadge: Phaser.GameObjects.Container | null = null;
+
   private renderInfo() {
     this.info.removeAll(true);
+    this.infoBadge?.destroy();
+    this.infoBadge = null;
     const sel = this.selected;
     const unit = sel ? (sel.kind === 'shop' ? this.run.shop[sel.index]?.unit : this.run.team[sel.index]) : null;
     const style = (size: number, color = COLORS.text, bold = false, align: 'center' | 'left' = 'center') => ({
@@ -330,6 +359,15 @@ export class ShopScene extends Phaser.Scene {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T) => (this.info.add(o), o);
 
     // Trait details
+    if (!unit && this.showCommander) {
+      const c = this.run.commander;
+      add(this.add.text(0, 0, c.name.toUpperCase(), { fontFamily: FONT_DISPLAY, fontSize: '26px', color: hexColor(c.color) }).setOrigin(0.5, 0));
+      add(this.add.text(0, 36, c.title, style(15, COLORS.textDim, true)).setOrigin(0.5, 0));
+      add(this.add.text(0, 200, c.passive, style(17, '#ffffff', true)).setOrigin(0.5, 0).setLineSpacing(4));
+      add(this.add.text(0, 300, 'Your commander for this run. Unlock more in Command HQ.', style(13, COLORS.textDim)).setOrigin(0.5, 0));
+      this.infoBadge = commanderBadge(this, INFO_X, 280, c.id, c.color, 110);
+      return;
+    }
     if (!unit && this.trait) {
       const def = TRAITS[this.trait];
       const team = this.run.team.filter((u): u is NonNullable<typeof u> => !!u);
