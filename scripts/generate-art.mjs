@@ -1,0 +1,78 @@
+// Generates creature art with the OpenAI Images API.
+//   OPENAI_API_KEY=... node scripts/generate-art.mjs [id ...] [--force]
+// Writes src/assets/creatures/<id>.webp (512x512, transparent). Existing files are skipped unless --force.
+import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
+import sharp from 'sharp';
+
+const MODEL = process.env.ART_MODEL ?? 'gpt-image-2';
+const OUT = new URL('../src/assets/creatures/', import.meta.url);
+const RAW = new URL('../art-source/', import.meta.url);
+
+const PALETTE = {
+  plasma: 'fiery orange and golden yellow with glowing plasma energy',
+  mech: 'steel grey and electric cyan with metallic plating and glowing lights',
+  cryo: 'icy light blue and white with frost crystals',
+  bio: 'leafy green and cream with organic plant features',
+  void: 'deep purple and lavender with starry cosmic patterns',
+};
+
+const STYLE = [
+  'Original creature design for a sci-fi monster-collecting autobattler game.',
+  'Style: polished 2D game sprite, glossy cel shading, bold clean dark outline, vibrant saturated colors,',
+  'cute but cool chibi proportions, strong readable silhouette, full body visible.',
+  'Pose: three-quarter side view, facing RIGHT, standing ready for battle, centered in frame.',
+  'Isolated on a fully transparent background. No text, no frame, no ground, no shadow, no scenery.',
+].join(' ');
+
+async function loadCreatures() {
+  // Parse the roster straight from the TypeScript source so there is one source of truth.
+  const src = await readFile(new URL('../src/data/creatures.ts', import.meta.url), 'utf8');
+  const re = /id: '(\w+)', name: '(\w+)', element: '(\w+)', tier: (\d)[\s\S]*?look: '([^']*)'/g;
+  return [...src.matchAll(re)].map(([, id, name, element, tier, look]) => ({ id, name, element, tier: +tier, look }));
+}
+
+function prompt(c) {
+  const size = c.tier >= 4 ? 'a large, powerful, imposing' : c.tier === 3 ? 'a strong, evolved-looking' : c.tier === 2 ? 'a mid-sized' : 'a small, cute, basic';
+  return `${STYLE} The creature is ${size} ${c.look}. Color palette: ${PALETTE[c.element]}. Name: ${c.name}.`;
+}
+
+async function generate(c) {
+  const res = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: MODEL, prompt: prompt(c), size: '1024x1024', background: 'transparent', quality: 'medium', n: 1 }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(`${c.id}: ${res.status} ${JSON.stringify(body.error ?? body)}`);
+  const png = Buffer.from(body.data[0].b64_json, 'base64');
+  await mkdir(RAW, { recursive: true });
+  await writeFile(new URL(`${c.id}.png`, RAW), png);
+  // Trim empty space, then fit into a square so every sprite is framed the same way.
+  const out = await sharp(png)
+    .trim({ threshold: 10 })
+    .resize(460, 460, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .extend({ top: 26, bottom: 26, left: 26, right: 26, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .webp({ quality: 90, alphaQuality: 100 })
+    .toBuffer();
+  await mkdir(OUT, { recursive: true });
+  await writeFile(new URL(`${c.id}.webp`, OUT), out);
+  console.log(`ok ${c.id}`);
+}
+
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const only = args.filter((a) => !a.startsWith('--'));
+const all = await loadCreatures();
+const todo = [];
+for (const c of all) {
+  if (only.length && !only.includes(c.id)) continue;
+  const exists = await access(new URL(`${c.id}.webp`, OUT)).then(() => true, () => false);
+  if (exists && !force) continue;
+  todo.push(c);
+}
+console.log(`generating ${todo.length} of ${all.length} creatures with ${MODEL}`);
+// A few at a time to stay well within rate limits.
+for (let i = 0; i < todo.length; i += 4) {
+  const results = await Promise.allSettled(todo.slice(i, i + 4).map(generate));
+  for (const r of results) if (r.status === 'rejected') console.error(String(r.reason));
+}

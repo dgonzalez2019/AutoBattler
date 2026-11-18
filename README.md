@@ -43,6 +43,16 @@ npm run build    # production build into dist/
 
 Put `<creature-id>.png` (or `.webp`) in `src/assets/creatures/`. It is picked up automatically, with no code changes. Images should be square (256×256 or larger), on a transparent background, with the creature facing **right**. Any creature without a file falls back to a procedurally drawn placeholder.
 
+To generate the art with the OpenAI Images API, run:
+
+```bash
+OPENAI_API_KEY=sk-... npm run art               # every creature that has no art yet
+OPENAI_API_KEY=sk-... npm run art -- sparkit    # one creature
+OPENAI_API_KEY=sk-... npm run art -- --force    # regenerate everything
+```
+
+The prompts are built from each creature's `look`, element and tier in `src/data/creatures.ts`. A shared style line keeps the whole roster consistent. Full-size originals are saved to `art-source/`, which git ignores.
+
 ## Deploy
 
 `.github/workflows/deploy.yml` builds the game and publishes it to GitHub Pages on every push to `main`. Turn this on once under **Settings → Pages → Source: GitHub Actions**.
