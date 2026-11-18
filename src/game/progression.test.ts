@@ -3,13 +3,12 @@ import { COMMANDER_LIST } from '../data/commanders';
 import { BASE_POOL, CREATURES, SHOP_POOL } from '../data/creatures';
 import { endlessRewards, rewardTrack, runRewards, xpToNext } from '../data/progression';
 import { FieldBattle } from '../sim/field';
-import { emptyModules } from './mothership';
 import { newProfile, Profile } from './profile';
 import { ENDLESS_FINAL_ROUND, Run } from './run';
 
 const fresh = () => new Profile(newProfile());
 const army = (ids: string[], commander?: string) => ({
-  name: 't', round: 5, wins: 0, lives: 5, modules: emptyModules(), commander,
+  name: 't', round: 5, wins: 0, lives: 5, commander,
   squads: ids.map((id) => ({ defId: id, atk: CREATURES[id].atk, hp: CREATURES[id].hp, level: 1 })),
 });
 
@@ -233,7 +232,7 @@ describe('economy', () => {
 
   it('interest: +1 per 5 gold saved, max +3', async () => {
     const { interestOn } = await import('./run');
-    expect([0, 4, 5, 9, 10, 15, 40].map(interestOn)).toEqual([0, 0, 1, 1, 2, 3, 3]);
+    expect([0, 4, 5, 9, 10, 15, 40].map((g) => interestOn(g))).toEqual([0, 0, 1, 1, 2, 3, 3]);
   });
 
   it('unspent gold carries over and earns interest; wins pay a bonus', () => {

@@ -2,16 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { typeMultiplier } from '../data/elements';
 import { generateOpponent } from '../game/ai';
 import { squadCount, type ArmySnapshot, type SquadSpec } from '../game/army';
-import { emptyModules } from '../game/mothership';
 import { FieldBattle } from './field';
 
-const army = (squads: SquadSpec[], modules = emptyModules()): ArmySnapshot => ({
+const army = (squads: SquadSpec[], boost?: ArmySnapshot['boost']): ArmySnapshot => ({
   name: 'test',
   round: 1,
   wins: 0,
   lives: 5,
   squads,
-  modules,
+  boost,
 });
 const sq = (defId: string, atk: number, hp: number, level = 1): SquadSpec => ({ defId, atk, hp, level });
 
@@ -29,8 +28,6 @@ describe('squads', () => {
     expect(squadCount('bryobit', 1)).toBe(6);
     expect(squadCount('bryobit', 2)).toBe(9);
     expect(squadCount('bryobit', 3)).toBe(12);
-    expect(squadCount('bryobit', 1, 2)).toBe(9); // Barracks 2: +50%
-    expect(squadCount('phoenyx', 1, 3)).toBe(1); // Legendaries stay solo
     expect(squadCount('mechadon', 1)).toBe(2);
   });
 
@@ -69,14 +66,6 @@ describe('FieldBattle', () => {
     expect(Math.abs(wins - losses)).toBeLessThanOrEqual(10);
   });
 
-  it('mothership armory and shields boost units', () => {
-    const mods = { ...emptyModules(), armory: 2, shields: 2 };
-    const b = new FieldBattle([army([sq('gearhound', 10, 30)], mods), army([sq('gearhound', 10, 30)])], 1);
-    const mine = b.units.find((u) => u.side === 0)!;
-    const theirs = b.units.find((u) => u.side === 1)!;
-    expect(mine.atk).toBe(13); // Armory 2: +30%
-    expect(mine.shield - theirs.shield).toBe(9); // Shield Bay 2: 30% of 30 health
-  });
 
   it('faint summons tokens onto the field', () => {
     const b = new FieldBattle([army([sq('nullmite', 1, 1)]), army([sq('mechadon', 5, 30)])], 1);
@@ -94,21 +83,13 @@ describe('FieldBattle', () => {
   });
 });
 
-describe('Mothership weapons', () => {
-  it('Orbital Cannon strikes enemies every 6s; Med Bay heals every 5s', () => {
-    const mods = { ...emptyModules(), orbital: 2, medbay: 1 };
-    const b = new FieldBattle([army([sq('glaciarch', 1, 400)], mods), army([sq('glaciarch', 1, 400), sq('thornback', 1, 400)])], 1);
-    let strikes = 0;
-    let heals = 0;
-    for (let i = 0; i < 260 && !b.result; i++) {
-      b.step();
-      for (const e of b.events) {
-        if (e.t === 'orbital' && e.side === 0) strikes += e.ids.length;
-        if (e.t === 'medbay' && e.side === 0) heals++;
-      }
-      b.events = [];
-    }
-    expect(strikes).toBeGreaterThanOrEqual(3 * 2); // ~13s: two volleys of 3
-    expect(heals).toBeGreaterThanOrEqual(1);
+describe('permanent upgrade boost', () => {
+  it('Command HQ upgrades raise attack and health by a percentage', () => {
+    const b = new FieldBattle([army([sq('gearhound', 10, 30)], { atkPct: 0.1, hpPct: 0.1 }), army([sq('gearhound', 10, 30)])], 1);
+    const mine = b.units.find((u) => u.side === 0)!;
+    const theirs = b.units.find((u) => u.side === 1)!;
+    expect(mine.atk).toBe(11);
+    expect(mine.maxHp).toBe(33);
+    expect(theirs.atk).toBe(10);
   });
 });

@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CREATURES, SHOP_POOL } from '../data/creatures';
-import { emptyModules } from './mothership';
 import { FieldBattle } from '../sim/field';
 import type { ArmySnapshot, SquadSpec } from './army';
 import { squadCount } from './army';
 import { computeTraits } from './synergy';
 
 const sq = (defId: string, level = 1): SquadSpec => ({ defId, atk: CREATURES[defId].atk, hp: CREATURES[defId].hp, level });
-const army = (squads: SquadSpec[]): ArmySnapshot => ({ name: 't', round: 1, wins: 0, lives: 5, squads, modules: emptyModules() });
+const army = (squads: SquadSpec[]): ArmySnapshot => ({ name: 't', round: 1, wins: 0, lives: 5, squads });
 
 describe('computeTraits', () => {
   it('counts distinct species and activates tiers', () => {
@@ -41,7 +40,7 @@ describe('synergies in battle', () => {
   });
 
   it('Swarm 2 adds units to swarm squads', () => {
-    expect(squadCount('bryobit', 1, 0, 1)).toBe(8);
+    expect(squadCount('bryobit', 1, 1)).toBe(8);
     const b = new FieldBattle([army([sq('bryobit'), sq('boltbug')]), army([sq('frostling')])], 1);
     expect(b.aliveCount(0)).toBe(16);
   });

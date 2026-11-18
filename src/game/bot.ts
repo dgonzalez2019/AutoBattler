@@ -2,7 +2,6 @@ import { getDef } from '../data/creatures';
 import { ELEMENTS } from '../data/elements';
 import { CLASSES, type TraitId } from '../data/traits';
 import { Rng } from '../sim/rng';
-import type { ModuleId } from './mothership';
 import { REROLL_COST, type Run } from './run';
 
 /**
@@ -13,8 +12,6 @@ import { REROLL_COST, type Run } from './run';
  */
 export interface BotMemory {
   focus?: TraitId;
-  /** Playtest switch: never buy Mothership upgrades. */
-  noMothership?: boolean;
 }
 
 const fits = (defId: string, focus?: TraitId) => {
@@ -77,25 +74,6 @@ export function botTurn(run: Run, rng: Rng, mem: BotMemory, skill = 1) {
       continue;
     }
     break;
-  }
-
-  // Mothership: economy and Scanner early, combat modules later; one upgrade a turn,
-  // after the army is bought (filling all 5 slots comes first).
-  if (!mem.noMothership && run.round >= 2 && (run.team.every(Boolean) || run.round <= 4) && smart()) {
-    const prefs: ModuleId[] =
-      run.round <= 4
-        ? ['reactor', 'scanner']
-        : rng.next() < 0.5
-          ? ['orbital', 'armory', 'shields', 'barracks', 'medbay', 'scanner', 'reactor']
-          : ['armory', 'shields', 'barracks', 'orbital', 'medbay', 'reactor', 'scanner'];
-    const keep = run.round >= 3 ? 6 : 3;
-    for (const id of prefs) {
-      const cost = run.moduleCost(id);
-      if (cost !== null && run.gold - cost >= keep) {
-        run.buyModule(id);
-        break;
-      }
-    }
   }
 
   // Tanky melee in front, ranged at the back.

@@ -3,7 +3,6 @@ import { GAME_VERSION } from '../config';
 import { generateOpponent } from './ai';
 import type { ArmySnapshot } from './army';
 import { OnlineOpponentSource, type Opponent, type OpponentSource } from './matchmaking';
-import { emptyModules } from './mothership';
 import { parseArmy } from './validate';
 
 const aiFallback: OpponentSource = {
@@ -19,32 +18,31 @@ const row = {
   round: 3,
   wins: 2,
   lives: 4,
-  army: { squads: [{ defId: 'gearhound', atk: 4, hp: 14, level: 2 }], modules: { armory: 1 } },
+  army: { squads: [{ defId: 'gearhound', atk: 4, hp: 14, level: 2 }], boost: { atkPct: 0.06, hpPct: 0 } },
 };
 
 describe('parseArmy', () => {
-  it('accepts a well-formed army and fills in missing modules', () => {
+  it('accepts a well-formed army and its upgrade boost', () => {
     const a = parseArmy(row)!;
     expect(a.name).toBe('Rival');
     expect(a.squads[0]).toEqual({ defId: 'gearhound', atk: 4, hp: 14, level: 2 });
-    expect(a.modules).toEqual({ ...emptyModules(), armory: 1 });
+    expect(a.boost).toEqual({ atkPct: 0.06, hpPct: 0 });
   });
 
   it('rejects unknown creatures, tokens, bad levels and absurd stats', () => {
-    const bad = (squad: object) => parseArmy({ ...row, army: { squads: [squad], modules: {} } });
+    const bad = (squad: object) => parseArmy({ ...row, army: { squads: [squad], boost: {} } });
     expect(bad({ defId: 'pikachu', atk: 1, hp: 1, level: 1 })).toBeNull();
     expect(bad({ defId: 'drone', atk: 1, hp: 1, level: 1 })).toBeNull();
     expect(bad({ defId: 'gearhound', atk: 1, hp: 1, level: 7 })).toBeNull();
     expect(bad({ defId: 'gearhound', atk: 99999, hp: 1, level: 1 })).toBeNull();
     expect(bad({ defId: 'gearhound', atk: 1.5, hp: 1, level: 1 })).toBeNull();
-    expect(parseArmy({ ...row, army: { squads: [], modules: {} } })).toBeNull();
+    expect(parseArmy({ ...row, army: { squads: [], boost: {} } })).toBeNull();
     expect(parseArmy('nonsense')).toBeNull();
   });
 
-  it('clamps module levels to their max', () => {
-    const a = parseArmy({ ...row, army: { ...row.army, modules: { barracks: 99, reactor: 1 } } })!;
-    expect(a.modules.barracks).toBe(0);
-    expect(a.modules.reactor).toBe(1);
+  it('caps the upgrade boost so tampered armies cannot claim huge bonuses', () => {
+    const a = parseArmy({ ...row, army: { ...row.army, boost: { atkPct: 5, hpPct: -1 } } })!;
+    expect(a.boost).toEqual({ atkPct: 0.2, hpPct: 0 });
   });
 });
 
@@ -76,7 +74,7 @@ describe('OnlineOpponentSource', () => {
     });
     expect((await down.findOpponent(2, 1)).kind).toBe('ai');
     const tampered = new OnlineOpponentSource(aiFallback, async () =>
-      json([{ ...row, army: { squads: [{ defId: 'gearhound', atk: 1e9, hp: 1, level: 1 }], modules: {} } }]),
+      json([{ ...row, army: { squads: [{ defId: 'gearhound', atk: 1e9, hp: 1, level: 1 }], boost: {} } }]),
     );
     expect((await tampered.findOpponent(2, 1)).kind).toBe('ai');
   });
@@ -93,8 +91,7 @@ describe('OnlineOpponentSource', () => {
       wins: 1,
       lives: 3,
       squads: [{ defId: 'sparkit', atk: 2, hp: 6, level: 1 }],
-      modules: emptyModules(),
-    };
+        };
     await src.submit(snap);
     expect(sent).toMatchObject({ name: 'Me', version: GAME_VERSION, round: 4, wins: 1, lives: 3 });
     expect((sent as unknown as { army: { squads: unknown[] } }).army.squads).toHaveLength(1);

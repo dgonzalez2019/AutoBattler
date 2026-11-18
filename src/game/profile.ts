@@ -1,5 +1,6 @@
 import { COMMANDER_LIST, COMMANDERS, DEFAULT_COMMANDER } from '../data/commanders';
 import { BASE_POOL, CREATURES, SHOP_POOL } from '../data/creatures';
+import { metaBonuses, UPGRADES, upgradeDef, type MetaBonuses, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
 import { endlessRewards, MAX_LEVEL, RESEARCH_PRICE, runRewards, rewardTrack, xpToNext, type LevelReward, type RunSummary } from '../data/progression';
 
 /**
@@ -19,6 +20,8 @@ export interface ProfileData {
   stats: { runs: number; wins: number; champions: number; bestWins: number; bestEndless: number; endlessClears: number };
   /** Creatures unlocked since the player last opened the collection. */
   fresh: string[];
+  /** Permanent upgrade levels bought with Stardust. */
+  upgrades: UpgradeLevels;
 }
 
 export interface RunResult {
@@ -41,6 +44,7 @@ export function newProfile(): ProfileData {
     selectedCommander: DEFAULT_COMMANDER,
     stats: { runs: 0, wins: 0, champions: 0, bestWins: 0, bestEndless: 0, endlessClears: 0 },
     fresh: [],
+    upgrades: {},
   };
 }
 
@@ -57,6 +61,12 @@ function sanitize(raw: unknown): ProfileData {
   if (Array.isArray(r.commanders)) p.commanders = [...new Set([...p.commanders, ...r.commanders.filter((c) => COMMANDERS[c])])];
   if (Array.isArray(r.creatures)) p.creatures = [...new Set(r.creatures.filter((c) => CREATURES[c]?.unlock))];
   if (Array.isArray(r.fresh)) p.fresh = r.fresh.filter((c) => CREATURES[c] || COMMANDERS[c]);
+  if (r.upgrades && typeof r.upgrades === 'object') {
+    for (const u of UPGRADES) {
+      const lv = (r.upgrades as Record<string, unknown>)[u.id];
+      if (typeof lv === 'number') p.upgrades[u.id] = num(lv, 0, u.costs.length, 0);
+    }
+  }
   if (typeof r.selectedCommander === 'string' && p.commanders.includes(r.selectedCommander)) p.selectedCommander = r.selectedCommander;
   const st = r.stats as ProfileData['stats'] | undefined;
   if (st) {
@@ -117,6 +127,31 @@ export class Profile {
   /** Creature ids your shop can roll. */
   shopPool(): string[] {
     return [...BASE_POOL.map((c) => c.id), ...this.data.creatures];
+  }
+
+  upgradeLevel(id: UpgradeId): number {
+    return this.data.upgrades[id] ?? 0;
+  }
+
+  /** Stardust price of the next level, or null when maxed. */
+  upgradePrice(id: UpgradeId): number | null {
+    const def = upgradeDef(id);
+    const lv = this.upgradeLevel(id);
+    return lv >= def.costs.length ? null : def.costs[lv];
+  }
+
+  buyUpgrade(id: UpgradeId): boolean {
+    const price = this.upgradePrice(id);
+    if (price === null || this.data.stardust < price) return false;
+    this.data.stardust -= price;
+    this.data.upgrades[id] = this.upgradeLevel(id) + 1;
+    this.save();
+    return true;
+  }
+
+  /** What your permanent upgrades add to a run. */
+  bonuses(): MetaBonuses {
+    return metaBonuses(this.data.upgrades);
   }
 
   selectCommander(id: string): boolean {

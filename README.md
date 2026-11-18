@@ -29,24 +29,19 @@ npm run build    # production build into dist/
 - **Economy:** gold carries over between turns.
   - Each turn you earn **base income** (10 on round 1, then 7 rising to 10 by round 8) plus **interest**: +1 for every 5 gold you saved, up to +3.
   - Winning a battle pays +1.
-  - The Reactor, some commanders and economy creatures add more.
+  - Some commanders, permanent upgrades and economy creatures add more.
   - The shop shows what next turn will pay and how much more you need to save for the next interest step.
 - **Shop:** a reroll costs 1, and selling refunds `level + rarity - 1` gold. You can freeze a shop slot to keep it for later.
   - The shop has 3 slots at first, 4 from round 3 and 5 from round 7.
   - Odds shift toward rarer creatures each round. Round 1 is all Commons; by round 11 it's 20 / 25 / 30 / 18 / 7%. See `src/data/rarity.ts`.
 - **Merging:** drop a duplicate squad onto its twin. Each merge gives +1 attack and +2 health per unit. Level 2 makes the squad x1.5 bigger, and level 3 makes it x2. Ability numbers multiply by level.
 - **Battle:** both armies charge across a real-time battlefield. Abilities trigger on start of battle, attack, hurt, faint, kill or a timer ("every 4s"). Some trigger in the shop instead: on buy, sell or end of turn.
-- **Mothership:** your home base, upgraded with shop gold (3 / 5 / 7 per level). Upgrades last the whole run, and your ship hovers over the battlefield firing its weapons.
-  - **Economy:** Reactor (+1 / 2 / 4 gold a turn).
-  - **Shop:** Scanner (shop rolls 1 to 3 rounds ahead; +1 shop slot from level 2).
-  - **Army:** Barracks (+25 / 50 / 75% squad size), Armory (+15 / 30 / 45% attack), Shield Bay (start with a shield of 15 / 30 / 45% of health).
-  - **Weapons:** Orbital Cannon (laser strikes every 5s), Med Bay (heals your most injured every 4s).
-  - In an A/B playtest, smart play with upgrades became champion 28 to 32% of the time, versus 23% without.
 - **Winning and Endless Mode:** reaching 10 wins ends the game as a victory, with your rewards banked on the spot. You can then optionally carry on with the same army in Endless Mode.
   - Endless is a bonus mode with a hard cap at round 50, which is not meant to be reached.
   - Losses cost 2 lives, and from round 14 AI enemies gain +8% attack and health per round (`endlessPower` in `src/game/ai.ts`).
   - Endless pays its own extra rewards when it ends.
   - In the playtest, no Endless run got past round 40.
+- **Opponents:** AI armies are built through the real shop with the same gold you have, so they're always armies a player could have at that round. Rounds 1 to 3 are easier: the AI plays loosely and some early opponents spend less of their gold. In the playtest, rounds 1 and 2 are won about 75% of the time, round 3 about 55%.
 - **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You have 5 lives and win the run at 10 wins. See [Online matchmaking](#online-matchmaking).
 
 ### Synergies
@@ -114,6 +109,15 @@ Progress carries over between runs (`src/game/profile.ts`, stored in the browser
 - **Commander Level and XP:** earned from every run, based on wins, rounds survived and championships.
 - **Reward track:** each level grants 50 Stardust and unlocks creatures or commanders (Command HQ, Level Rewards tab).
 - **Stardust:** buy commanders before their level, or research a locked creature early (80 to 400 depending on rarity).
+- **Permanent upgrades** (Command HQ, Upgrades tab, `src/data/upgrades.ts`) are bought with Stardust and apply to every future run:
+  - War Chest: +1 to +3 starting gold.
+  - Compound Interest: max interest +1 / +2.
+  - Quick Reroll: 1 or 2 free rerolls a turn.
+  - Salvage: +1 gold per sale.
+  - Talent Scout: +1 shop slot.
+  - Reinforcements: +1 / +2 lives.
+  - Weapons Lab and Bio-Armor: up to +10% attack / health.
+  - The attack and health boost travels with your army online (capped by validation).
 - **Collection:** all 75 creatures by element and rarity, with lock state and details.
 - **Unlocks are sidegrades:** they add options rather than raw power, so online matches stay fair between new and veteran players. Your shop only rolls creatures you've unlocked, but opponents can field anything.
 - **Economy creatures:** Sparkplug, Dynamo and Scrapper bank or earn gold. End-of-turn gold carries into the next turn.

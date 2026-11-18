@@ -79,7 +79,6 @@ export class BattleScene extends Phaser.Scene {
     fitCamera(this);
     this.cameras.main.fadeIn(250);
     this.drawArena();
-    this.drawMotherships(data);
 
     this.battle = new FieldBattle([data.player, data.enemy], data.seed);
     this.startCounts = [Math.max(1, this.battle.aliveCount(0)), Math.max(1, this.battle.aliveCount(1))];
@@ -101,56 +100,6 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ── Setup ───────────────────────────────────────────────
-
-  /** Each side's Mothership hovers at its back corner of the arena; weapons fire from it. */
-  private shipPos(side: 0 | 1) {
-    return side === 0 ? { x: OX + 80, y: OY + FIELD_H - 10 } : { x: OX + FIELD_W - 80, y: OY + FIELD_H - 10 };
-  }
-
-  private drawMotherships(data: BattleInit) {
-    ([0, 1] as const).forEach((side) => {
-      const army = side === 0 ? data.player : data.enemy;
-      const built = Object.values(army.modules).reduce((a, b) => a + (b ?? 0), 0);
-      const { x, y } = this.shipPos(side);
-      const ship = this.add
-        .image(x, y, 'mothership')
-        .setScale((built ? 170 : 130) / 480)
-        .setFlipX(side === 1)
-        .setAlpha(built ? 0.95 : 0.55)
-        .setDepth(-2);
-      this.tweens.add({ targets: ship, y: y - 6, duration: 1500 + side * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    });
-  }
-
-  /** Orbital Cannon: red lasers from the ship to each target. */
-  private orbitalStrike(side: 0 | 1, ids: number[]) {
-    if (this.skipping) return;
-    const from = this.shipPos(side);
-    for (const id of ids) {
-      const s = this.sprites.get(id);
-      if (!s) continue;
-      const beam = this.add.graphics().setDepth(870);
-      beam.lineStyle(6, 0xef476f, 0.9).lineBetween(from.x, from.y - 20, s.img.x, s.img.y);
-      beam.lineStyle(2, 0xffffff, 1).lineBetween(from.x, from.y - 20, s.img.x, s.img.y);
-      this.tweens.add({ targets: beam, alpha: 0, duration: 350, onComplete: () => beam.destroy() });
-      this.burst(s.img.x, s.img.y, 0xef476f);
-    }
-    this.cameras.main.shake(90, 0.003);
-  }
-
-  /** Med Bay: green rings on each healed creature. */
-  private medbayPulse(side: 0 | 1, ids: number[]) {
-    if (this.skipping) return;
-    const from = this.shipPos(side);
-    const glow = this.add.circle(from.x, from.y - 10, 30, 0x52b788, 0.35).setDepth(860);
-    this.tweens.add({ targets: glow, scale: 2, alpha: 0, duration: 450, onComplete: () => glow.destroy() });
-    for (const id of ids) {
-      const s = this.sprites.get(id);
-      if (!s) continue;
-      const ring = this.add.circle(s.img.x, s.img.y, 14, 0x52b788, 0.25).setStrokeStyle(3, 0x95d5b2).setDepth(860);
-      this.tweens.add({ targets: ring, scale: 2.2, alpha: 0, duration: 500, onComplete: () => ring.destroy() });
-    }
-  }
 
   private drawArena() {
     const g = this.add.graphics().setDepth(-10);
@@ -399,12 +348,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       case 'status':
         return;
-      case 'orbital':
-        this.orbitalStrike(e.side, e.ids);
-        return;
-      case 'medbay':
-        this.medbayPulse(e.side, e.ids);
-        return;
+
       case 'death': {
         if (!u || !s) return;
         this.burst(s.img.x, s.img.y, ELEMENT_INFO[u.element].color);

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { emptyModules } from '../game/mothership';
 import { Run, rollCreature } from '../game/run';
 import { FieldBattle } from '../sim/field';
 import { Rng } from '../sim/rng';
@@ -8,7 +7,7 @@ import { ELEMENTS } from './elements';
 import { RARITY, rollRarity, sellValue, shopOdds } from './rarity';
 
 const army = (squads: { defId: string; level?: number }[]) => ({
-  name: 't', round: 1, wins: 0, lives: 5, modules: emptyModules(),
+  name: 't', round: 1, wins: 0, lives: 5,
   squads: squads.map((s) => ({ defId: s.defId, atk: CREATURES[s.defId].atk, hp: CREATURES[s.defId].hp, level: s.level ?? 1 })),
 });
 

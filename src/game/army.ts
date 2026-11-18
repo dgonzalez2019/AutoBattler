@@ -1,6 +1,4 @@
 import { getDef } from '../data/creatures';
-import type { ModuleLevels } from './mothership';
-import { BARRACKS_PCT } from './mothership';
 
 /** One squad as stored on a team: stats are per individual creature. */
 export interface SquadSpec {
@@ -21,7 +19,8 @@ export interface ArmySnapshot {
   lives: number;
   /** Index 0 is the front squad. */
   squads: SquadSpec[];
-  modules: ModuleLevels;
+  /** Permanent upgrades (Command HQ): +% attack / health for every creature. */
+  boost?: { atkPct: number; hpPct: number };
   /** Commander id; their battle passive applies to this army. */
   commander?: string;
 }
@@ -32,11 +31,8 @@ const LEVEL_SIZE = [1, 1.5, 2];
 export const SWARM_EXTRA = [0, 2, 4];
 
 /** How many creatures a squad fields in battle. */
-export function squadCount(defId: string, level: number, barracksLevel = 0, swarmTier = 0): number {
+export function squadCount(defId: string, level: number, swarmTier = 0): number {
   const def = getDef(defId);
-  const base = Math.round(def.squad * LEVEL_SIZE[level - 1]);
-  // Barracks: +20% per level, at least +1 creature per level (Legendaries stay solo).
-  const barracks = def.rarity === 5 ? 0 : Math.max(barracksLevel, Math.round(base * BARRACKS_PCT[barracksLevel]));
   const extra = def.class === 'swarm' ? SWARM_EXTRA[swarmTier] : 0;
-  return Math.max(1, base + barracks + extra);
+  return Math.max(1, Math.round(def.squad * LEVEL_SIZE[level - 1]) + extra);
 }

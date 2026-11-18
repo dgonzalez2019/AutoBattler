@@ -13,7 +13,6 @@ import { ELEMENTS } from '../src/data/elements';
 import { CLASSES, type TraitId } from '../src/data/traits';
 import { generateOpponent } from '../src/game/ai';
 import { botTurn } from '../src/game/bot';
-import { MODULES } from '../src/game/mothership';
 import { REROLL_COST, Run, unitCost } from '../src/game/run';
 import { FieldBattle, type BattleResult } from '../src/sim/field';
 import { Rng } from '../src/sim/rng';
@@ -102,7 +101,6 @@ it.skipIf(!process.env.PLAYTEST)('playtest', () => {
     playRuns(casual, base, 'CASUAL bot, new player (base 45)', 1000),
     playRuns(smart, base, 'SMART bot, new player (base 45)', 2000),
     playRuns(smart, all, 'SMART bot, veteran (all 75)', 3000),
-    ...(process.env.MOTHERSHIP ? [playRuns((r, g, m) => { (m as { noMothership?: boolean }).noMothership = true; botTurn(r, g, m, 1); }, base, 'SMART bot, NO Mothership upgrades', 2000)] : []),
   ];
   // Print via an error so the output survives vitest's reporter.
   throw new Error('\n' + out.join('\n\n'));

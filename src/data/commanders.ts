@@ -13,7 +13,8 @@ export interface CommanderEffects {
   sellBonus?: number;
   goldEveryOtherRound?: number;
   startLives?: number;
-  moduleDiscount?: number;
+  /** Creatures of this element cost less gold. */
+  elementDiscount?: { element: Element; amount: number };
   /** Bonus stats given whenever you buy a creature of this element. */
   buyBonus?: { element: Element; atk: number; hp: number };
   // Battle
@@ -75,8 +76,8 @@ const list: CommanderDef[] = [
   },
   {
     id: 'bolt', name: 'Bolt', title: 'Chief Engineer', unlockLevel: 5, price: 350, color: 0x8d99ae,
-    passive: 'Mech units start with +5 Shield. Mothership upgrades cost 1 less.',
-    effects: { mechShield: 5, moduleDiscount: 1 },
+    passive: 'Mech units start with +5 Shield. Mech creatures cost 1 gold less.',
+    effects: { mechShield: 5, elementDiscount: { element: 'mech', amount: 1 } },
     look: 'cheerful stocky engineer with mechanical goggles, a robotic arm and a tool belt full of gadgets',
   },
   {

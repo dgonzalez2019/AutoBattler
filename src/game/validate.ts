@@ -1,12 +1,12 @@
 import { COMMANDERS } from '../data/commanders';
 import { CREATURES } from '../data/creatures';
 import type { ArmySnapshot, SquadSpec } from './army';
-import { emptyModules, MODULES, type ModuleLevels } from './mothership';
 import { MAX_SQUADS } from './run';
 
 /** Generous caps: anything above these can't be reached by normal play. */
 const MAX_ATK = 2000;
 const MAX_HP = 8000;
+const MAX_BOOST = 0.2;
 
 const int = (v: unknown, lo: number, hi: number): number | null =>
   typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : null;
@@ -35,18 +35,19 @@ export function parseArmy(raw: unknown): ArmySnapshot | null {
     squads.push({ defId: def.id, atk, hp, level });
   }
 
-  const modules: ModuleLevels = emptyModules();
-  const mods = (army.modules ?? {}) as Record<string, unknown>;
-  for (const m of MODULES) modules[m.id] = int(mods[m.id], 0, m.costs.length) ?? 0;
+  // Permanent-upgrade boost: capped well above the real maximum.
+  const boostRaw = (army.boost ?? {}) as Record<string, unknown>;
+  const pct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(MAX_BOOST, Math.max(0, v)) : 0);
+  const boost = { atkPct: pct(boostRaw.atkPct), hpPct: pct(boostRaw.hpPct) };
 
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : 'Unknown Commander';
   return {
     name,
     round: int(r.round, 1, 999) ?? 1,
     wins: int(r.wins, 0, 999) ?? 0,
-    lives: int(r.lives, 0, 7) ?? 0,
+    lives: int(r.lives, 0, 9) ?? 0,
     squads,
-    modules,
+    boost,
     commander: typeof army.commander === 'string' && COMMANDERS[army.commander] ? army.commander : undefined,
   };
 }

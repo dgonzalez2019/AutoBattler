@@ -10,11 +10,12 @@ import { rewardTrack } from '../data/progression';
 import { hexColor, RARITY } from '../data/rarity';
 import { TRAITS } from '../data/traits';
 import { profile } from '../game/profile';
+import { UPGRADES } from '../data/upgrades';
 import { Run } from '../game/run';
 import { COLORS, FONT_BODY, FONT_DISPLAY, H, W } from '../ui/theme';
 import { button, drawBackground, panel, toast, type Button } from '../ui/widgets';
 
-type Tab = 'commanders' | 'collection' | 'rewards';
+type Tab = 'commanders' | 'upgrades' | 'collection' | 'rewards';
 
 const CONTENT_TOP = 150;
 
@@ -58,11 +59,12 @@ export class HQScene extends Phaser.Scene {
 
     const tabs: [Tab, string][] = [
       ['commanders', 'Commanders'],
+      ['upgrades', 'Upgrades'],
       ['collection', 'Collection'],
       ['rewards', 'Level Rewards'],
     ];
     tabs.forEach(([t, label], i) => {
-      this.tabButtons[t] = button(this, W / 2 - 230 + i * 230, 108, 210, 46, label, 0x3a0ca3, () => {
+      this.tabButtons[t] = button(this, W / 2 - 345 + i * 230, 108, 210, 46, label, 0x3a0ca3, () => {
         this.tab = t;
         this.picked = null;
         this.render();
@@ -88,6 +90,7 @@ export class HQScene extends Phaser.Scene {
     this.renderHeader();
     for (const [t, b] of Object.entries(this.tabButtons) as [Tab, Button][]) b.setAlpha(t === this.tab ? 1 : 0.55);
     if (this.tab === 'commanders') this.renderCommanders();
+    else if (this.tab === 'upgrades') this.renderUpgrades();
     else if (this.tab === 'collection') this.renderCollection();
     else this.renderRewards();
     this.renderFooter();
@@ -185,6 +188,68 @@ export class HQScene extends Phaser.Scene {
       return;
     }
     this.render();
+  }
+
+  // ── Upgrades ─────────────────────────────────────────────
+
+  /** Permanent upgrades bought with Stardust; they apply to every future run. */
+  private renderUpgrades() {
+    const prof = profile();
+    this.keep(
+      this.add
+        .text(W / 2, CONTENT_TOP, 'Permanent upgrades: bought with Stardust, active in every run', {
+          fontFamily: FONT_BODY,
+          fontSize: '15px',
+          fontStyle: 'bold',
+          color: COLORS.textDim,
+        })
+        .setOrigin(0.5),
+    );
+    UPGRADES.forEach((u, i) => {
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const x = 40 + col * 305;
+      const y = 175 + row * 230;
+      const lv = prof.upgradeLevel(u.id);
+      const price = prof.upgradePrice(u.id);
+      const g = this.keep(this.add.graphics());
+      g.fillStyle(COLORS.panel, lv ? 0.95 : 0.75).fillRoundedRect(x, y, 290, 215, 16);
+      g.lineStyle(lv ? 3 : 2, u.color, lv ? 1 : 0.5).strokeRoundedRect(x, y, 290, 215, 16);
+      u.costs.forEach((_, p) => {
+        g.fillStyle(p < lv ? u.color : 0x000000, p < lv ? 1 : 0.45).fillRoundedRect(x + 18 + p * 30, y + 52, 24, 9, 4);
+      });
+      this.keep(this.add.text(x + 18, y + 16, u.name, { fontFamily: FONT_DISPLAY, fontSize: '20px', color: '#ffffff' }));
+      this.keep(
+        this.add.text(x + 18, y + 74, lv ? `Now: ${u.levels[lv - 1]}` : 'Not unlocked', {
+          fontFamily: FONT_BODY,
+          fontSize: '14px',
+          fontStyle: 'bold',
+          color: lv ? '#ffffff' : COLORS.textDim,
+          wordWrap: { width: 255 },
+        }),
+      );
+      if (price !== null) {
+        this.keep(
+          this.add.text(x + 18, y + 118, `Next: ${u.levels[lv]}`, {
+            fontFamily: FONT_BODY,
+            fontSize: '13px',
+            color: '#ffd166',
+            wordWrap: { width: 255 },
+          }),
+        );
+      }
+      const b = this.keep(
+        button(this, x + 145, y + 182, 250, 44, price === null ? 'MAXED' : `${lv ? 'Upgrade' : 'Unlock'}  ${price} dust`, u.color, () => {
+          if (!prof.buyUpgrade(u.id)) {
+            toast(this, 'Not enough Stardust');
+            return;
+          }
+          toast(this, `${u.name} ${prof.upgradeLevel(u.id) > 1 ? 'upgraded' : 'unlocked'}!`);
+          this.render();
+        }),
+      );
+      b.setEnabled(price !== null && prof.data.stardust >= price);
+    });
   }
 
   // ── Collection ───────────────────────────────────────────
@@ -334,7 +399,7 @@ export class HQScene extends Phaser.Scene {
 
   private startRun() {
     const prof = profile();
-    this.registry.set('run', new Run({ commander: prof.data.selectedCommander, pool: prof.shopPool() }));
+    this.registry.set('run', new Run({ commander: prof.data.selectedCommander, pool: prof.shopPool(), meta: prof.bonuses() }));
     this.registry.set('rewarded', false);
     this.registry.set('endlessRewarded', false);
     this.cameras.main.fadeOut(250);

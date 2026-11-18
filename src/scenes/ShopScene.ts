@@ -9,8 +9,7 @@ import { squadCount } from '../game/army';
 import { opponents } from '../game/matchmaking';
 import { endlessPower, ENDLESS_SCALING_FROM } from '../game/ai';
 import { playerName } from '../game/player';
-import { MODULES, moduleText } from '../game/mothership';
-import { ENDLESS_FINAL_ROUND, INTEREST_PER, MAX_INTEREST, MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, unitCost, WINS_TO_VICTORY } from '../game/run';
+import { ENDLESS_FINAL_ROUND, INTEREST_PER, MAX_SQUADS as MAX_TEAM, REROLL_COST, Run, WINS_TO_VICTORY } from '../game/run';
 import { hexColor, RARITIES, RARITY, sellValue, shopOdds } from '../data/rarity';
 import { CreatureView } from '../ui/CreatureView';
 import { COLORS, FONT_BODY, FONT_DISPLAY } from '../ui/theme';
@@ -40,11 +39,9 @@ export class ShopScene extends Phaser.Scene {
   private hud!: Record<'gold' | 'lives' | 'wins' | 'round', Phaser.GameObjects.Text>;
   private info!: Phaser.GameObjects.Container;
   private btn!: Record<'reroll' | 'freeze' | 'sell' | 'end', Button>;
-  private ship: Phaser.GameObjects.Container | null = null;
   private syn!: Phaser.GameObjects.Container;
   private trait: TraitId | null = null;
   private showCommander = false;
-  private shipBtn!: Button;
   private incomeText!: Phaser.GameObjects.Text;
   /** Creature previewed from a trait's sprite grid. */
   private preview: string | null = null;
@@ -57,7 +54,6 @@ export class ShopScene extends Phaser.Scene {
   create() {
     this.run = this.registry.get('run');
     this.selected = null;
-    this.ship = null;
     this.busy = false;
     drawBackground(this, this.run.round);
     fitCamera(this);
@@ -105,7 +101,6 @@ export class ShopScene extends Phaser.Scene {
       sell: button(this, 620, 672, 200, 60, 'Sell', 0xef476f, () => this.onSell()),
       end: button(this, INFO_X, 672, 280, 64, 'BATTLE!', 0x06d6a0, () => void this.onEndTurn()),
     };
-    this.shipBtn = button(this, INFO_X, 48, 280, 54, 'MOTHERSHIP', 0x7b2cbf, () => this.openMothership());
 
     this.dyn = this.add.container(0, 0);
     this.input.dragDistanceThreshold = 10;
@@ -164,15 +159,13 @@ export class ShopScene extends Phaser.Scene {
     this.dyn.removeAll(true);
 
     this.hud.gold.setText(String(run.gold));
-    const built = Object.values(run.modules).reduce((a, b) => a + b, 0);
-    this.shipBtn.setLabel(built ? `MOTHERSHIP  ·  ${built}` : 'MOTHERSHIP');
     // Economy hint: what next turn pays if you stop spending now.
     const next = run.projectedIncome;
     const toNext = INTEREST_PER - (run.gold % INTEREST_PER);
     this.incomeText.setText(
       `Next turn +${next.total}` +
         (next.interest ? `  (interest +${next.interest})` : '') +
-        (next.interest < MAX_INTEREST ? `  ·  save ${toNext} more for +1` : '  ·  max interest'),
+        (next.interest < run.interestCap ? `  ·  save ${toNext} more for +1` : '  ·  max interest'),
     );
     this.hud.lives.setText(String(run.lives));
     this.hud.wins.setText(run.endless ? String(run.wins) : `${run.wins}/${WINS_TO_VICTORY}`);
@@ -213,10 +206,10 @@ export class ShopScene extends Phaser.Scene {
       tag.fillStyle(COLORS.gold).fillCircle(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, 15);
       tag.lineStyle(2, 0x000000, 0.5).strokeCircle(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, 15);
       const price = this.add
-        .text(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, String(unitCost(slot.unit.defId)), {
+        .text(x - SLOT_W / 2 + 18, SHOP_Y - SLOT_H / 2 + 18, String(run.priceOf(slot.unit.defId)), {
           fontFamily: FONT_DISPLAY,
           fontSize: '18px',
-          color: run.gold >= unitCost(slot.unit.defId) ? '#3a2a00' : '#b00020',
+          color: run.gold >= run.priceOf(slot.unit.defId) ? '#3a2a00' : '#b00020',
         })
         .setOrigin(0.5);
       this.dyn.add([tag, price]);
@@ -326,7 +319,7 @@ export class ShopScene extends Phaser.Scene {
   /** "x6" pill in the slot corner: how many creatures this squad fields. */
   private countPill(x: number, y: number, defId: string, level: number) {
     const swarm = computeTraits(this.run.team.filter((u): u is NonNullable<typeof u> => !!u)).levels.swarm;
-    const n = squadCount(defId, level, this.run.modules.barracks, swarm);
+    const n = squadCount(defId, level, swarm);
     return this.add
       .text(x + SLOT_W / 2 - 8, y - SLOT_H / 2 + 8, `x${n}`, {
         fontFamily: FONT_DISPLAY,
@@ -499,7 +492,7 @@ export class ShopScene extends Phaser.Scene {
         .text(
           0,
           72,
-          `${RARITY[def.rarity].name}  ·  ${unitCost(def.id)} gold  ·  Level ${unit.level}\n${unit.atk} attack  ·  ${unit.hp} health  ·  Squad of ${squadCount(def.id, unit.level, this.run.modules.barracks, swarm)}  ·  ${def.ranged ? 'Ranged' : 'Melee'}`,
+          `${RARITY[def.rarity].name}  ·  ${this.run.priceOf(def.id)} gold  ·  Level ${unit.level}\n${unit.atk} attack  ·  ${unit.hp} health  ·  Squad of ${squadCount(def.id, unit.level, swarm)}  ·  ${def.ranged ? 'Ranged' : 'Melee'}`,
           style(14, '#ffffff', true),
         )
         .setOrigin(0.5, 0)
@@ -736,103 +729,6 @@ export class ShopScene extends Phaser.Scene {
     });
   }
 
-  // ── Mothership ───────────────────────────────────────────
 
-  /** Full-screen hangar: the ship on the left, the seven modules as cards on the right. */
-  private openMothership() {
-    this.ship?.destroy();
-    const c = this.add.container(0, 0).setDepth(200);
-    this.ship = c;
-    const shade = this.add.rectangle(640, 360, 1280 + BLEED * 2, 720, 0x05060f, 0.82).setInteractive();
-    shade.on('pointerup', () => this.closeMothership());
-    const bg = panel(this, 640, 372, 1240, 680, 0.98);
-    const block = this.add.zone(640, 372, 1240, 680).setInteractive(); // swallow taps on the panel
-    c.add([shade, bg, block]);
 
-    // Ship column
-    const built = Object.values(this.run.modules).reduce((a, b) => a + b, 0);
-    const shipImg = this.add.image(180, 260, 'mothership').setScale(300 / 480);
-    this.tweens.add({ targets: shipImg, y: 250, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    c.add([
-      this.add.text(180, 92, 'MOTHERSHIP', { fontFamily: FONT_DISPLAY, fontSize: '34px', color: '#e0aaff' }).setOrigin(0.5),
-      shipImg,
-      this.add
-        .text(180, 380, `${built} / ${MODULES.length * 3} upgrades`, { fontFamily: FONT_DISPLAY, fontSize: '20px', color: '#ffffff' })
-        .setOrigin(0.5),
-      this.add
-        .text(180, 414, `${this.run.gold} gold`, { fontFamily: FONT_DISPLAY, fontSize: '26px', color: '#ffd166' })
-        .setOrigin(0.5),
-      this.add
-        .text(
-          180,
-          450,
-          'Upgrades last for the whole run. Weapons fire during every battle, and your ship hovers over the battlefield.',
-          { fontFamily: FONT_BODY, fontSize: '14px', color: COLORS.textDim, align: 'center', wordWrap: { width: 260 } },
-        )
-        .setOrigin(0.5, 0),
-    ]);
-
-    // Module cards: 2 columns x 4 rows
-    MODULES.forEach((m, i) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const x = 340 + col * 470;
-      const y = 60 + row * 158;
-      const lvl = this.run.modules[m.id];
-      const maxed = lvl >= m.costs.length;
-      const g = this.add.graphics();
-      g.fillStyle(COLORS.panelLight, lvl ? 0.75 : 0.45).fillRoundedRect(x, y, 450, 146, 16);
-      g.lineStyle(lvl ? 3 : 2, m.color, lvl ? 1 : 0.5).strokeRoundedRect(x, y, 450, 146, 16);
-      for (let p = 0; p < m.costs.length; p++) {
-        g.fillStyle(p < lvl ? m.color : 0x000000, p < lvl ? 1 : 0.45).fillRoundedRect(x + 340 + p * 34, y + 18, 28, 10, 5);
-      }
-      c.add(g);
-      c.add(this.add.text(x + 18, y + 12, m.name, { fontFamily: FONT_DISPLAY, fontSize: '22px', color: '#ffffff' }));
-      c.add(
-        this.add.text(x + 18 + 0, y + 42, m.kind.toUpperCase(), {
-          fontFamily: FONT_BODY,
-          fontSize: '11px',
-          fontStyle: 'bold',
-          color: hexColor(m.color),
-        }),
-      );
-      c.add(
-        this.add.text(x + 18, y + 62, lvl ? `Now: ${moduleText(m, lvl)}` : 'Not built', {
-          fontFamily: FONT_BODY,
-          fontSize: '14px',
-          fontStyle: 'bold',
-          color: lvl ? '#ffffff' : COLORS.textDim,
-          wordWrap: { width: 260 },
-        }),
-      );
-      if (!maxed) {
-        c.add(
-          this.add.text(x + 18, y + 102, `Next: ${moduleText(m, lvl + 1)}`, {
-            fontFamily: FONT_BODY,
-            fontSize: '13px',
-            color: '#ffd166',
-            wordWrap: { width: 270 },
-          }),
-        );
-      }
-      const cost = this.run.moduleCost(m.id);
-      const label = cost === null ? 'MAXED' : `${lvl ? 'Upgrade' : 'Build'} ${cost}g`;
-      const b = button(this, x + 370, y + 96, 140, 50, label, m.color, () => {
-        if (!this.run.buyModule(m.id)) {
-          toast(this, cost === null ? 'Already maxed' : 'Not enough gold');
-          return;
-        }
-        this.refresh();
-        this.openMothership();
-      });
-      b.setEnabled(cost !== null && this.run.gold >= cost);
-      c.add(b);
-    });
-    c.add(button(this, 1105, 650, 200, 54, 'Close', 0x5c677d, () => this.closeMothership()));
-  }
-
-  private closeMothership() {
-    this.ship?.destroy();
-    this.ship = null;
-  }
 }

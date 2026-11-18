@@ -10,11 +10,10 @@ create table if not exists public.armies (
   version     int  not null check (version between 1 and 1000),
   round       int  not null check (round between 1 and 999),
   wins        int  not null check (wins between 0 and 999),
-  lives       int  not null check (lives between 0 and 7),
+  lives       int  not null check (lives between 0 and 9),
   army        jsonb not null check (
     jsonb_typeof(army -> 'squads') = 'array'
     and jsonb_array_length(army -> 'squads') between 1 and 5
-    and jsonb_typeof(army -> 'modules') = 'object'
     and pg_column_size(army) < 4000
   )
 );
