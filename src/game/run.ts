@@ -57,9 +57,9 @@ export interface Income {
 export const REROLL_COST = 1;
 export const START_LIVES = 15;
 
-/** Lives lost per defeat: 1 early, rising to 3. */
+/** Lives lost per defeat: 1 in rounds 1-2, 2 in rounds 3-5, 3 from round 6. */
 export function livesLost(round: number): number {
-  return round <= 4 ? 1 : round <= 8 ? 2 : 3;
+  return round <= 2 ? 1 : round <= 5 ? 2 : 3;
 }
 export const WINS_TO_VICTORY = 10;
 

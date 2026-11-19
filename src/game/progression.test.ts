@@ -257,9 +257,9 @@ describe('economy', () => {
 });
 
 describe('lives', () => {
-  it('start at 15; a loss costs 1 life early, 2 mid-game and 3 late', async () => {
+  it('start at 15; a loss costs 1 life in rounds 1-2, 2 in 3-5, 3 from 6', async () => {
     const { livesLost } = await import('./run');
     expect(new Run({ seed: 1, commander: 'rook' }).lives).toBe(15);
-    expect([1, 4, 5, 8, 9, 15].map(livesLost)).toEqual([1, 1, 2, 2, 3, 3]);
+    expect([1, 2, 3, 5, 6, 15].map(livesLost)).toEqual([1, 1, 2, 2, 3, 3]);
   });
 });

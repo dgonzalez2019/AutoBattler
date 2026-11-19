@@ -46,7 +46,7 @@ npm run build    # production build into dist/
   - Endless pays its own extra rewards when it ends.
   - In the playtest, no Endless run got past round 40.
 - **Opponents:** AI armies are built through the real shop with the same gold you have, so they're always armies a player could have at that round. Rounds 1 to 3 are easier: the AI plays loosely and some early opponents spend less of their gold. In the playtest, rounds 1 and 2 are won about 75% of the time, round 3 about 55%.
-- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You start with 15 lives and win the run at 10 wins. A loss costs 1 life in rounds 1 to 4, 2 lives in rounds 5 to 8, and 3 lives after that. See [Online matchmaking](#online-matchmaking).
+- **Matchmaking:** this works like Super Auto Pets. At round N you fight an army another player saved at round N. You start with 15 lives and win the run at 10 wins. A loss costs 1 life in rounds 1 and 2, 2 lives in rounds 3 to 5, and 3 lives from round 6. See [Online matchmaking](#online-matchmaking).
 
 ### Synergies
 
